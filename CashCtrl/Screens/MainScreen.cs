@@ -6,7 +6,7 @@ using Spectre.Console.Rendering;
 namespace CashCtrl.Screens;
 
 // ── Focus panels ─────────────────────────────────────────────────────────────
-public enum MainFocus { None, Controls, Chart, Calendar, Total, Expenses }
+public enum MainFocus { None, Controls, Chart, Calendar, Total, Expenses, List }
 
 public static class MainScreen
 {
@@ -28,6 +28,10 @@ public static class MainScreen
         var siblingControls = ControlService.FindControlsInDirectory(controlsDir);
         int controlsIdx = siblingControls.IndexOf(control.FilePath);
         if (controlsIdx < 0) controlsIdx = 0;
+        int listIdx     = 0;
+        bool isDeleting = false;
+        var  deleteKeys = new HashSet<string>();
+        int calMonthIdx = -1; // -1 = auto (most recent month)
 
         while (true)
         {
@@ -36,21 +40,65 @@ public static class MainScreen
             if (refreshed is not null) control = refreshed;
             siblingControls = ControlService.FindControlsInDirectory(controlsDir);
 
-            DrawAll(control, siblingControls, controlsIdx, focus);
+            var period = control.Periods.Values.FirstOrDefault();
+            var entries = period?.Entries
+                .Select(kv => (key: kv.Key, entry: kv.Value))
+                .OrderByDescending(x => x.entry.Date)
+                .ToList() ?? new();
+
+            if (listIdx >= entries.Count) listIdx = Math.Max(0, entries.Count - 1);
+
+            DrawAll(control, siblingControls, controlsIdx, focus, listIdx, isDeleting, deleteKeys, calMonthIdx);
 
             var k = await Task.Run(() => Console.ReadKey(true));
 
-            if (k.Key == ConsoleKey.Escape) { AnsiConsole.Clear(); return; }
+            if (k.Key == ConsoleKey.Escape)
+            {
+                if (isDeleting) { isDeleting = false; deleteKeys.Clear(); continue; }
+                if (focus == MainFocus.List) { focus = MainFocus.None; continue; }
+                AnsiConsole.Clear(); return;
+            }
 
-            if (k.KeyChar is 'o' or 'O')
+            // Cycle calendar month
+            if (k.KeyChar is 's' or 'S' && !isDeleting)
+            {
+                var p3 = control.Periods.Values.FirstOrDefault();
+                var months = GetEntryMonths(p3);
+                if (months.Count > 0)
+                {
+                    if (calMonthIdx < 0) calMonthIdx = months.Count - 1;
+                    calMonthIdx = (calMonthIdx + 1) % months.Count;
+                }
+            }
+
+            // Focus the Control list
+            if (k.KeyChar is 'c' or 'C' && !isDeleting)
                 focus = focus == MainFocus.Controls ? MainFocus.None : MainFocus.Controls;
 
-            if (k.KeyChar is 't' or 'T')
+            // Focus the entry list
+            if (k.KeyChar is 'l' or 'L' && !isDeleting)
+                focus = focus == MainFocus.List ? MainFocus.None : MainFocus.List;
+
+            // Edit initial total balance
+            if (k.KeyChar is 'i' or 'I' && !isDeleting)
+            {
+                DrawAll(control, siblingControls, controlsIdx, focus, listIdx, isDeleting, deleteKeys, calMonthIdx);
+                var p2 = control.Periods.Values.FirstOrDefault();
+                var currentTv = p2?.TotalValue ?? 0m;
+                if (await EditTotalModal.ShowAsync(control, currentTv))
+                {
+                    var r = await ControlService.LoadControlAsync(control.FilePath);
+                    if (r is not null) control = r;
+                }
+            }
+
+            // Focus the Total money to create new income
+            if (k.KeyChar is 't' or 'T' && !isDeleting)
             {
                 focus = MainFocus.Total;
-                DrawAll(control, siblingControls, controlsIdx, focus);
-                var period = control.Periods.Values.FirstOrDefault();
-                var currentTotal = (period?.TotalValue ?? 0m) + (period?.TotalIncome ?? 0m);
+                DrawAll(control, siblingControls, controlsIdx, focus, listIdx, isDeleting, deleteKeys, calMonthIdx);
+                var p2 = control.Periods.Values.FirstOrDefault();
+                var currentTotal = (p2?.TotalValue ?? 0m) + (p2?.TotalIncome ?? 0m);
                 if (await NewIncomeModal.ShowAsync(control, currentTotal))
                 {
                     var r = await ControlService.LoadControlAsync(control.FilePath);
@@ -58,10 +106,11 @@ public static class MainScreen
                 }
             }
 
-            if (k.KeyChar is 'e' or 'E')
+            // Focus the Total expense to create new expense
+            if (k.KeyChar is 'e' or 'E' && !isDeleting)
             {
                 focus = MainFocus.Expenses;
-                DrawAll(control, siblingControls, controlsIdx, focus);
+                DrawAll(control, siblingControls, controlsIdx, focus, listIdx, isDeleting, deleteKeys, calMonthIdx);
                 if (await NewExpenseModal.ShowAsync(control))
                 {
                     var r = await ControlService.LoadControlAsync(control.FilePath);
@@ -69,7 +118,7 @@ public static class MainScreen
                 }
             }
 
-            if (focus == MainFocus.Controls)
+            if (focus == MainFocus.Controls && !isDeleting)
             {
                 if (k.Key == ConsoleKey.UpArrow && controlsIdx > 0) controlsIdx--;
                 if (k.Key == ConsoleKey.DownArrow && controlsIdx < siblingControls.Count - 1) controlsIdx++;
@@ -83,6 +132,48 @@ public static class MainScreen
                     }
                 }
             }
+
+            if (focus == MainFocus.List)
+            {
+                if (k.Key == ConsoleKey.UpArrow   && listIdx > 0)                listIdx--;
+                if (k.Key == ConsoleKey.DownArrow && listIdx < entries.Count - 1) listIdx++;
+
+                // Enter delete mode with D
+                if (k.KeyChar is 'd' or 'D' && !isDeleting && entries.Count > 0)
+                {
+                    isDeleting = true;
+                    deleteKeys.Clear();
+                    continue;
+                }
+
+                if (isDeleting)
+                {
+                    // Space toggles selection of current row
+                    if (k.KeyChar == ' ' && entries.Count > 0)
+                    {
+                        var key = entries[listIdx].key;
+                        if (!deleteKeys.Add(key)) deleteKeys.Remove(key);
+                    }
+
+                    // Enter confirms deletion
+                    if (k.Key == ConsoleKey.Enter && deleteKeys.Count > 0)
+                    {
+                        var periodKey = ControlService.GetCurrentPeriodKey(control);
+                        await ControlService.DeleteEntriesAsync(control, periodKey, deleteKeys);
+                        var r = await ControlService.LoadControlAsync(control.FilePath);
+                        if (r is not null) control = r;
+                        isDeleting = false;
+                        deleteKeys.Clear();
+                        listIdx = 0;
+                    }
+                }
+                else if (k.Key == ConsoleKey.Enter && entries.Count > 0)
+                {
+                    var selected = entries[listIdx].entry;
+                    if (selected.Origin == "expense")
+                        await ExpenseDetailModal.ShowAsync(selected);
+                }
+            }
         }
     }
 
@@ -91,7 +182,11 @@ public static class MainScreen
         ControlFile control,
         List<string> siblings,
         int controlsIdx,
-        MainFocus focus)
+        MainFocus focus,
+        int listIdx = 0,
+        bool isDeleting = false,
+        HashSet<string>? deleteKeys = null,
+        int calMonthIdx = -1)
     {
         Console.CursorVisible = false;
         // Move to top-left instead of clearing to avoid flicker
@@ -105,17 +200,21 @@ public static class MainScreen
         // ── Build top panels ──────────────────────────────────────────────────
         var controlsPanel = MakeControlsPanel(siblings, controlsIdx, control.FilePath, focus == MainFocus.Controls);
         var chartPanel    = MakeChartPanel(period, focus == MainFocus.Chart);
-        var calPanel      = MakeCalendarPanel(period, focus == MainFocus.Calendar);
+        var calPanel      = MakeCalendarPanel(period, focus == MainFocus.Calendar, calMonthIdx);
 
         // ── Build middle summary row (compact inline values + clock) ──────────
-        var monLabel  = MakeSummaryPanel("Total money",    FormatMoney(totalMoney), Theme.Accent,           focus == MainFocus.Total);
-        var expLabel  = MakeSummaryPanel("Total expenses", FormatMoney(totalExp),   new Color(255, 80, 80), focus == MainFocus.Expenses);
-        var diffLabel = MakeSummaryPanel("Difference",     FormatMoney(difference),
+        var monLabel  = MakeSummaryPanel("Total Amount",    FormatMoney(totalMoney), Theme.Accent,           focus == MainFocus.Total);
+        var expLabel  = MakeSummaryPanel("Total Expenses", FormatMoney(totalExp),   new Color(255, 80, 80), focus == MainFocus.Expenses);
+        var diffLabel = MakeSummaryPanel("Available value",     FormatMoney(difference),
                                          difference >= 0 ? Theme.Accent : new Color(255, 80, 80), false);
         var clockLabel = MakeSummaryClockPanel();
 
         // ── Build bottom entry list ────────────────────────────────────────────
-        var listPanel = MakeEntryListPanel(period, focus == MainFocus.Expenses);
+        var keyedEntries = period?.Entries
+            .Select(kv => (key: kv.Key, entry: kv.Value))
+            .OrderByDescending(x => x.entry.Date)
+            .ToList() ?? new List<(string, ControlEntry)>();
+        var listPanel = MakeEntryListPanel(keyedEntries, focus == MainFocus.List, listIdx, isDeleting, deleteKeys);
 
         // ── Spectre Layout ────────────────────────────────────────────────────
         // Structure:
@@ -132,27 +231,33 @@ public static class MainScreen
         //   └─ layout["list"]   (25%)
 
         // Reserve 1 line for the footer status bar
-        int availableHeight = Math.Max(9, Console.WindowHeight - 1);
+        int availableHeight = Math.Max(10, Console.WindowHeight - 1);
+        // mid is fixed at 3 lines (top-border + value + bottom-border)
+        const int midHeight  = 3;
+        int remaining        = availableHeight - midHeight;
+        // top gets 40% of remaining, list gets 60%
+        int topHeight  = Math.Max(4, (int)(remaining * 0.40));
+        int listHeight = Math.Max(4, remaining - topHeight);
 
         var layout = new Layout("root")
         {
             Size = availableHeight
         };
         layout.SplitRows(
-            new Layout("top").Ratio(1)
+            new Layout("top") { Size = topHeight }
                 .SplitColumns(
                     new Layout("controls").Ratio(1),
-                    new Layout("chart").Ratio(1),
+                    new Layout("chart").Ratio(2),
                     new Layout("calendar").Ratio(1)
                 ),
-            new Layout("mid").Ratio(1)
+            new Layout("mid") { Size = midHeight }
                 .SplitColumns(
                     new Layout("total").Ratio(1),
                     new Layout("exptotal").Ratio(1),
                     new Layout("diff").Ratio(1),
                     new Layout("clock").Ratio(1)
                 ),
-            new Layout("list").Ratio(1)
+            new Layout("list") { Size = listHeight }
         );
 
         layout["controls"].Update(controlsPanel);
@@ -166,12 +271,13 @@ public static class MainScreen
 
         AnsiConsole.Write(layout);
 
-        // Status bar — always on the reserved last line
-        var footer = $" [bold {Hex(Theme.Warning)}](O)[/][{Hex(Theme.Muted)}] controls   [/]" +
+        // -> AVAILABLE COMMANDS
+        var footer = $" [bold {Hex(Theme.Warning)}](C)[/][{Hex(Theme.Muted)}] controls   [/]" +
+                     $"[bold {Hex(Theme.Warning)}](I)[/][{Hex(Theme.Muted)}] set balance   [/]" +
                      $"[bold {Hex(Theme.Warning)}](T)[/][{Hex(Theme.Muted)}] new income   [/]" +
                      $"[bold {Hex(Theme.Warning)}](E)[/][{Hex(Theme.Muted)}] new expense   [/]" +
-                     $"[bold {Hex(Theme.Warning)}](G)[/][{Hex(Theme.Muted)}] chart   [/]" +
-                     $"[bold {Hex(Theme.Warning)}](C)[/][{Hex(Theme.Muted)}] calendar   [/]" +
+                     $"[bold {Hex(Theme.Warning)}](L)[/][{Hex(Theme.Muted)}] list   [/]" +
+                     $"[bold {Hex(Theme.Warning)}](S)[/][{Hex(Theme.Muted)}] calendar month   [/]" +
                      $"[bold {Hex(Theme.Warning)}]Esc[/][{Hex(Theme.Muted)}] quit[/]";
         AnsiConsole.Markup(footer);
     }
@@ -250,9 +356,9 @@ public static class MainScreen
         return MakePanel(content, "Expense types", focused);
     }
 
-    private static Panel MakeCalendarPanel(ControlPeriod? period, bool focused)
+    private static List<(int year, int month)> GetEntryMonths(ControlPeriod? period)
     {
-        var dayMap = new Dictionary<int, (bool exp, bool inc)>();
+        var months = new SortedSet<(int year, int month)>();
         if (period is not null)
         {
             foreach (var e in period.Entries.Values)
@@ -261,6 +367,43 @@ public static class MainScreen
                     System.Globalization.CultureInfo.InvariantCulture,
                     System.Globalization.DateTimeStyles.None, out var dt))
                 {
+                    months.Add((dt.Year, dt.Month));
+                }
+            }
+        }
+        return months.ToList();
+    }
+
+    private static Panel MakeCalendarPanel(ControlPeriod? period, bool focused, int calMonthIdx = -1)
+    {
+        var months = GetEntryMonths(period);
+
+        // Pick which month to display
+        (int year, int month) displayMonth;
+        if (months.Count == 0)
+        {
+            displayMonth = (DateTime.Now.Year, DateTime.Now.Month);
+        }
+        else
+        {
+            // Default (-1) = most recent = last in sorted list
+            var idx = calMonthIdx < 0 || calMonthIdx >= months.Count
+                ? months.Count - 1
+                : calMonthIdx;
+            displayMonth = months[idx];
+        }
+
+        // Build day map for the display month
+        var dayMap = new Dictionary<int, (bool exp, bool inc)>();
+        if (period is not null)
+        {
+            foreach (var e in period.Entries.Values)
+            {
+                if (DateTime.TryParseExact(e.Date, "dd/MM/yyyy",
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out var dt)
+                    && dt.Year == displayMonth.year && dt.Month == displayMonth.month)
+                {
                     var cur = dayMap.GetValueOrDefault(dt.Day);
                     dayMap[dt.Day] = (cur.exp || e.Origin == "expense",
                                       cur.inc || e.Origin == "income");
@@ -268,13 +411,33 @@ public static class MainScreen
             }
         }
 
-        var now         = DateTime.Now;
-        var firstDay    = new DateTime(now.Year, now.Month, 1);
+        var firstDay    = new DateTime(displayMonth.year, displayMonth.month, 1);
         int startDow    = (int)firstDay.DayOfWeek;
-        int daysInMonth = DateTime.DaysInMonth(now.Year, now.Month);
+        int daysInMonth = DateTime.DaysInMonth(displayMonth.year, displayMonth.month);
 
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine($"[bold {Hex(Theme.Secondary)}]{now:MMMM yyyy}[/]");
+
+        // Month tabs row (show each month as abbreviation, highlight active)
+        if (months.Count > 1)
+        {
+            var activeIdx = calMonthIdx < 0 || calMonthIdx >= months.Count
+                ? months.Count - 1
+                : calMonthIdx;
+            var tabSb = new System.Text.StringBuilder();
+            for (int i = 0; i < months.Count; i++)
+            {
+                var m   = months[i];
+                var lbl = new DateTime(m.year, m.month, 1).ToString("MMM", System.Globalization.CultureInfo.InvariantCulture);
+                if (i == activeIdx)
+                    tabSb.Append($"[bold {Hex(Theme.Warning)}]{Markup.Escape(lbl)}[/]");
+                else
+                    tabSb.Append($"[{Hex(Theme.Muted)}]{Markup.Escape(lbl)}[/]");
+                if (i < months.Count - 1) tabSb.Append($"[{Hex(Theme.Muted)}]|[/]");
+            }
+            sb.AppendLine(tabSb.ToString());
+        }
+
+        sb.AppendLine($"[bold {Hex(Theme.Secondary)}]{firstDay:MMMM yyyy}[/]");
         sb.AppendLine($"[{Hex(Theme.Muted)}]Su Mo Tu We Th Fr Sa[/]");
 
         for (int week = 0; week < 6; week++)
@@ -316,56 +479,110 @@ public static class MainScreen
 
     private static Panel MakeSummaryClockPanel()
     {
-        var time    = DateTime.Now.ToString("HH:mm:ss");
+        var time    = DateTime.Now.ToString("HH:mm");
         var content = Align.Center(
             new Markup($"[bold {Hex(Theme.Primary)}]{time}[/]"));
         return MakePanel(content, "Clock", false, Justify.Center);
     }
 
-    private static Panel MakeEntryListPanel(ControlPeriod? period, bool focused)
+    private static Panel MakeEntryListPanel(
+        List<(string key, ControlEntry entry)> entries,
+        bool focused,
+        int selectedIdx  = 0,
+        bool isDeleting  = false,
+        HashSet<string>? deleteKeys = null)
     {
-        var entries = period?.Entries.Values.OrderByDescending(e => e.Date).ToList()
-                      ?? new List<ControlEntry>();
+        var dim = Hex(Theme.Muted);
+        var sec = Hex(Theme.Secondary);
+        var warn = Hex(Theme.Warning);
+        const string red = "#FF6B6B";
 
         IRenderable content;
         if (entries.Count == 0)
         {
-            content = new Markup($"[{Hex(Theme.Muted)}](no entries yet)[/]");
+            content = new Markup($"[{dim}](no entries yet)[/]");
         }
         else
         {
             var table = new Table();
             table.Expand();
             table.Border(TableBorder.Rounded);
-            table.BorderColor(Theme.Border);
+            table.BorderColor(focused || isDeleting ? Theme.Warning : Theme.Border);
 
-            table.AddColumn(new TableColumn($"[{Hex(Theme.Muted)}]Date[/]"));
-            table.AddColumn(new TableColumn($"[{Hex(Theme.Muted)}]Description[/]"));
-            table.AddColumn(new TableColumn($"[{Hex(Theme.Muted)}]Type[/]"));
-            table.AddColumn(new TableColumn($"[{Hex(Theme.Muted)}]Amount[/]").RightAligned());
-            table.AddColumn(new TableColumn($"[{Hex(Theme.Muted)}]Origin[/]").Centered());
+            table.AddColumn(new TableColumn($"[{dim}]Date[/]"));
+            table.AddColumn(new TableColumn($"[{dim}]Name[/]"));
+            table.AddColumn(new TableColumn($"[{dim}]Type[/]"));
+            table.AddColumn(new TableColumn($"[{dim}]Amount[/]").RightAligned());
+            table.AddColumn(new TableColumn($"[{dim}]Origin[/]").Centered());
 
-            foreach (var e in entries)
+            for (int i = 0; i < entries.Count; i++)
             {
-                var isIncome    = e.Origin == "income";
-                var amtColor    = isIncome ? "69DB7C" : "FF6B6B";
-                var originLabel = isIncome
-                    ? $"[#69DB7C]income[/]"
-                    : $"[#FF6B6B]expense[/]";
-                var typeHex     = e.TypeColor is { Length: > 0 } tc ? $"#{tc}" : Hex(Theme.Muted);
+                var (key, e) = entries[i];
+                var isIncome = e.Origin == "income";
+                var isCursor = (focused || isDeleting) && i == selectedIdx;
+                var isMarked = deleteKeys?.Contains(key) ?? false;
+
+                // Use Description first; fall back to the JSON key (old format stored name as key)
+                var displayName = !string.IsNullOrWhiteSpace(e.Description)
+                    ? e.Description!
+                    : key;
+                // In delete mode: marked = red, cursor = yellow >prefix, else dim
+                // In normal mode: cursor = yellow, else secondary
+                string rowColor;
+                if (isDeleting)
+                    rowColor = isMarked ? red : (isCursor ? warn : dim);
+                else
+                    rowColor = isCursor ? warn : sec;
+
+                var namePrefix = isCursor && isDeleting ? "> " : "  ";
+                var dateStr    = Markup.Escape(e.Date);
+                var nameStr    = Markup.Escape(namePrefix + displayName);
+                var typeStr    = Markup.Escape(e.Type ?? "-");
+                var amtStr     = Markup.Escape(FormatMoney(e.Total));
+
+                // Type color: use entry TypeColor only in normal rows; red everything in delete mode
+                var typeColor  = isDeleting || isCursor
+                    ? rowColor
+                    : (e.TypeColor is { Length: > 0 } tc ? $"#{tc}" : dim);
+
+                var originStr = isIncome ? "income" : "expense";
+                var originColor = isDeleting
+                    ? rowColor
+                    : (isIncome ? "#69DB7C" : red);
+
                 table.AddRow(
-                    new Markup($"[{Hex(Theme.Muted)}]{Markup.Escape(e.Date)}[/]"),
-                    new Markup($"[{Hex(Theme.Secondary)}]{Markup.Escape(e.Description ?? "-")}[/]"),
-                    new Markup($"[{typeHex}]{Markup.Escape(e.Type ?? "-")}[/]"),
-                    new Markup($"[bold #{amtColor}]{Markup.Escape(FormatMoney(e.Total))}[/]"),
-                    new Markup(originLabel)
+                    new Markup($"[{rowColor}]{dateStr}[/]"),
+                    new Markup($"[bold {rowColor}]{nameStr}[/]"),
+                    new Markup($"[{typeColor}]{typeStr}[/]"),
+                    new Markup($"[bold {rowColor}]{amtStr}[/]"),
+                    new Markup($"[{originColor}]{Markup.Escape(originStr)}[/]")
                 );
             }
 
             content = table;
         }
 
-        return MakePanel(content, "Expense / Income list", focused);
+        // Build panel header directly so hint is raw markup (not escaped)
+        var borderColor = focused || isDeleting ? Theme.Warning : Theme.Border;
+        var titleColor  = focused || isDeleting ? Theme.Warning : Theme.Muted;
+        var titleText   = $"[{Hex(titleColor)}]Expense / Income list[/]";
+        string hintMarkup;
+        if (isDeleting)
+            hintMarkup = $"  [{dim}]Space: mark  Enter: delete  Esc: cancel[/]";
+        else if (focused)
+            hintMarkup = $"  [{dim}]navigate  Enter: detail  D: delete  Esc: exit[/]";
+        else
+            hintMarkup = "";
+
+        var panel = new Panel(content)
+        {
+            Border      = BoxBorder.Rounded,
+            BorderStyle = new Style(borderColor),
+            Padding     = new Padding(1, 0),
+            Expand      = true,
+        };
+        panel.Header = new PanelHeader($"{titleText}{hintMarkup}", Justify.Left);
+        return panel;
     }
 
     // ── Generic panel factory ─────────────────────────────────────────────────

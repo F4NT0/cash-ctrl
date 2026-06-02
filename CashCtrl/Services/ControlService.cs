@@ -108,6 +108,25 @@ public static class ControlService
         await SaveControlAsync(control, periodDict, periodKey);
     }
 
+    public static async Task DeleteEntriesAsync(ControlFile control, string periodKey, IEnumerable<string> entryKeys)
+    {
+        var period = control.Periods.GetValueOrDefault(periodKey);
+        if (period is null) return;
+
+        var keysToRemove = new HashSet<string>(entryKeys);
+        var periodDict   = BuildPeriodDict(period);
+
+        foreach (var k in keysToRemove)
+            periodDict.Remove(k);
+
+        // Also remove from ExtensionData so reloaded in-memory totals are correct
+        if (period.ExtensionData is not null)
+            foreach (var k in keysToRemove)
+                period.ExtensionData.Remove(k);
+
+        await SaveControlAsync(control, periodDict, periodKey);
+    }
+
     public static async Task SaveIncomeAsync(ControlFile control, string periodKey, ControlEntry income)
     {
         var period = control.Periods.GetValueOrDefault(periodKey)
@@ -117,6 +136,18 @@ public static class ControlService
 
         var periodDict = BuildPeriodDict(period);
         periodDict[entryKey] = income;
+
+        control.Periods[periodKey] = period;
+        await SaveControlAsync(control, periodDict, periodKey);
+    }
+
+    public static async Task SaveTotalValueAsync(ControlFile control, string periodKey, decimal newTotalValue)
+    {
+        var period = control.Periods.GetValueOrDefault(periodKey)
+                     ?? new ControlPeriod { TotalValue = 0 };
+
+        var periodDict = BuildPeriodDict(period);
+        periodDict["total-value"] = newTotalValue;
 
         control.Periods[periodKey] = period;
         await SaveControlAsync(control, periodDict, periodKey);

@@ -34,21 +34,26 @@ public static class NewExpenseModal
         decimal amount   = 0m;
         string type      = string.Empty;
         string typeColor = string.Empty;
-        var items        = new List<(string name, decimal price, string unit)>();
-        int field        = 0; // 0=name, 1=amount, 2=type
+        string date      = DateTime.Now.ToString("dd/MM/yyyy");
+        // item tuple: name, quantity, size (Kg/Un), itemPrice (Kg), amount (Un)
+        var items        = new List<(string name, int qty, string unit, decimal itemPrice, decimal amount)>();
+        int field        = 0; // 0=name, 1=amount, 2=type, 3=date
         bool inItems     = false;
-        int  itemField   = 0; // 0=iname, 1=iprice, 2=iunit
+        // itemField: 0=iname, 1=iqty, 2=iunit, 3=iprice/iamount
+        int  itemField   = 0;
 
         // Temporary item being built
-        string iName  = string.Empty;
-        decimal iPrice = 0m;
-        string iUnit  = string.Empty;
+        string  iName      = string.Empty;
+        int     iQty       = 1;
+        string  iUnit      = string.Empty;  // "Kg" or "Un"
+        decimal iItemPrice = 0m;            // used when Kg
+        decimal iAmount    = 0m;            // used when Un
 
         while (true)
         {
-            DrawModal(name, amount, type, typeColor, items,
+            DrawModal(name, amount, type, typeColor, date, items,
                       field, inItems, itemField,
-                      iName, iPrice, iUnit, typeColors);
+                      iName, iQty, iUnit, iItemPrice, iAmount, typeColors);
 
             var key = Console.ReadKey(true);
 
@@ -62,12 +67,14 @@ public static class NewExpenseModal
             {
                 if (inItems)
                 {
-                    // Commit current item if non-empty
+                    // Commit current item if non-empty name
                     if (!string.IsNullOrWhiteSpace(iName))
                     {
-                        items.Add((iName, iPrice, iUnit));
-                        iName = string.Empty; iPrice = 0m; iUnit = string.Empty;
-                        itemField = 0;
+                        var isKg      = string.Equals(iUnit, "Kg", StringComparison.OrdinalIgnoreCase);
+                        var finalAmt  = isKg ? iItemPrice * iQty : iAmount;
+                        items.Add((iName, iQty, iUnit, isKg ? iItemPrice : 0m, finalAmt));
+                        iName = string.Empty; iQty = 1; iUnit = string.Empty;
+                        iItemPrice = 0m; iAmount = 0m; itemField = 0;
                     }
                     inItems = false;
                     continue;
@@ -87,18 +94,19 @@ public static class NewExpenseModal
 
                 var entry = new ControlEntry
                 {
-                    Date      = DateTime.Now.ToString("dd/MM/yyyy"),
-                    Total     = amount,
-                    Type      = type,
-                    TypeColor = typeColor,
-                    Origin    = "expense",
-                    Details   = items.Select(i => new EntryItem
+                    Date        = string.IsNullOrWhiteSpace(date) ? DateTime.Now.ToString("dd/MM/yyyy") : date,
+                    Total       = amount,
+                    Type        = type,
+                    TypeColor   = typeColor,
+                    Description = name,
+                    Origin      = "expense",
+                    Details     = items.Select(i => new EntryItem
                     {
                         Name      = i.name,
-                        ItemPrice = i.price,
+                        ItemPrice = i.itemPrice,
                         Size      = i.unit,
-                        Quantity  = 1,
-                        Amount    = i.price
+                        Quantity  = i.qty,
+                        Amount    = i.amount
                     }).ToList()
                 };
 
@@ -112,7 +120,7 @@ public static class NewExpenseModal
 
             if (key.Key == ConsoleKey.Tab && !inItems)
             {
-                field = (field + 1) % 3;
+                field = (field + 1) % 4;
                 continue;
             }
 
@@ -126,7 +134,10 @@ public static class NewExpenseModal
             // Item sub-field navigation
             if (inItems && key.Key == ConsoleKey.Tab)
             {
-                itemField = (itemField + 1) % 3;
+                // Fields: 0=name, 1=qty, 2=size, 3=price(Kg)/amount(Un)
+                // Only show field 3 if size is set
+                var maxField = string.IsNullOrEmpty(iUnit) ? 2 : 3;
+                itemField = (itemField + 1) % (maxField + 1);
                 continue;
             }
 
@@ -135,14 +146,31 @@ public static class NewExpenseModal
             {
                 if (inItems)
                 {
-                    if (itemField == 0 && iName.Length > 0) iName = iName[..^1];
-                    else if (itemField == 1 && iPrice > 0)
+                    if (itemField == 0 && iName.Length > 0)
+                        iName = iName[..^1];
+                    else if (itemField == 1 && iQty > 1)
+                        iQty = int.Parse(iQty.ToString()[..^1].Length > 0 ? iQty.ToString()[..^1] : "1");
+                    else if (itemField == 2 && iUnit.Length > 0)
                     {
-                        var s = iPrice.ToString("F2", System.Globalization.CultureInfo.InvariantCulture).Replace(".", "");
-                        s = s.Length > 1 ? s[..^1] : "0";
-                        iPrice = decimal.Parse(s) / 100m;
+                        iUnit = iUnit[..^1];
+                        iItemPrice = 0m; iAmount = 0m;
                     }
-                    else if (itemField == 2 && iUnit.Length > 0) iUnit = iUnit[..^1];
+                    else if (itemField == 3)
+                    {
+                        var isKg = string.Equals(iUnit, "Kg", StringComparison.OrdinalIgnoreCase);
+                        if (isKg && iItemPrice > 0)
+                        {
+                            var s = iItemPrice.ToString("F2", System.Globalization.CultureInfo.InvariantCulture).Replace(".", "");
+                            s = s.Length > 1 ? s[..^1] : "0";
+                            iItemPrice = decimal.Parse(s) / 100m;
+                        }
+                        else if (!isKg && iAmount > 0)
+                        {
+                            var s = iAmount.ToString("F2", System.Globalization.CultureInfo.InvariantCulture).Replace(".", "");
+                            s = s.Length > 1 ? s[..^1] : "0";
+                            iAmount = decimal.Parse(s) / 100m;
+                        }
+                    }
                 }
                 else
                 {
@@ -154,19 +182,42 @@ public static class NewExpenseModal
                         amount = decimal.Parse(s) / 100m;
                     }
                     else if (field == 2 && type.Length > 0) type = type[..^1];
+                    else if (field == 3 && date.Length > 0) date = date[..^1];
                 }
             }
             else if (key.KeyChar >= ' ')
             {
                 if (inItems)
                 {
-                    if (itemField == 0) iName += key.KeyChar;
+                    if (itemField == 0)
+                        iName += key.KeyChar;
                     else if (itemField == 1 && char.IsDigit(key.KeyChar))
                     {
-                        var s = iPrice.ToString("F2", System.Globalization.CultureInfo.InvariantCulture).Replace(".", "") + key.KeyChar;
-                        iPrice = decimal.Parse(s) / 100m;
+                        var s = iQty.ToString() + key.KeyChar;
+                        if (int.TryParse(s, out var q)) iQty = q;
                     }
-                    else if (itemField == 2) iUnit += key.KeyChar;
+                    else if (itemField == 2)
+                    {
+                        iUnit += key.KeyChar;
+                        iItemPrice = 0m; iAmount = 0m;
+                    }
+                    else if (itemField == 3)
+                    {
+                        var isKg = string.Equals(iUnit, "Kg", StringComparison.OrdinalIgnoreCase);
+                        if (char.IsDigit(key.KeyChar))
+                        {
+                            if (isKg)
+                            {
+                                var s = iItemPrice.ToString("F2", System.Globalization.CultureInfo.InvariantCulture).Replace(".", "") + key.KeyChar;
+                                iItemPrice = decimal.Parse(s) / 100m;
+                            }
+                            else
+                            {
+                                var s = iAmount.ToString("F2", System.Globalization.CultureInfo.InvariantCulture).Replace(".", "") + key.KeyChar;
+                                iAmount = decimal.Parse(s) / 100m;
+                            }
+                        }
+                    }
                 }
                 else
                 {
@@ -177,16 +228,17 @@ public static class NewExpenseModal
                         amount = decimal.Parse(s) / 100m;
                     }
                     else if (field == 2) type += key.KeyChar;
+                    else if (field == 3) date += key.KeyChar;
                 }
             }
         }
     }
 
     private static void DrawModal(
-        string name, decimal amount, string type, string typeColor,
-        List<(string name, decimal price, string unit)> items,
+        string name, decimal amount, string type, string typeColor, string date,
+        List<(string name, int qty, string unit, decimal itemPrice, decimal amount)> items,
         int field, bool inItems, int itemField,
-        string iName, decimal iPrice, string iUnit,
+        string iName, int iQty, string iUnit, decimal iItemPrice, decimal iAmount,
         Dictionary<string, string> typeColors)
     {
         int w  = Math.Max(Console.WindowWidth,  60);
@@ -196,9 +248,9 @@ public static class NewExpenseModal
         int mx = (w - mw) / 2;
         int my = Math.Max(0, (h - mh) / 2);
 
-        var lines = BuildLines(name, amount, type, typeColor, items,
+        var lines = BuildLines(name, amount, type, typeColor, date, items,
                                field, inItems, itemField,
-                               iName, iPrice, iUnit, typeColors, mw);
+                               iName, iQty, iUnit, iItemPrice, iAmount, typeColors, mw);
 
         Console.CursorVisible = false;
         for (int i = 0; i < lines.Count; i++)
@@ -211,10 +263,10 @@ public static class NewExpenseModal
     }
 
     private static List<string> BuildLines(
-        string name, decimal amount, string type, string typeColor,
-        List<(string name, decimal price, string unit)> items,
+        string name, decimal amount, string type, string typeColor, string date,
+        List<(string name, int qty, string unit, decimal itemPrice, decimal amount)> items,
         int field, bool inItems, int itemField,
-        string iName, decimal iPrice, string iUnit,
+        string iName, int iQty, string iUnit, decimal iItemPrice, decimal iAmount,
         Dictionary<string, string> typeColors, int mw)
     {
         var p   = $"#{Theme.Primary.R:X2}{Theme.Primary.G:X2}{Theme.Primary.B:X2}";
@@ -222,7 +274,6 @@ public static class NewExpenseModal
         var dim = $"#{Theme.Muted.R:X2}{Theme.Muted.G:X2}{Theme.Muted.B:X2}";
         var acc = $"#{Theme.Accent.R:X2}{Theme.Accent.G:X2}{Theme.Accent.B:X2}";
         var brd = $"#{110:X2}{100:X2}{160:X2}";
-
         var inner = mw - 2;
 
         string Hl(bool active, string s) => active
@@ -239,14 +290,12 @@ public static class NewExpenseModal
         string Sep(string left = "├", string right = "┤") =>
             $"[{brd}]{left}{new string('─', inner)}{right}[/]";
 
-        var amtStr  = amount.ToString("C2", new System.Globalization.CultureInfo("pt-BR"));
-        var iAmtStr = iPrice.ToString("C2", new System.Globalization.CultureInfo("pt-BR"));
+        var brPt    = new System.Globalization.CultureInfo("pt-BR");
+        var amtStr  = amount.ToString("C2", brPt);
 
-        // Resolve type color for display
         var dispColor = string.IsNullOrEmpty(typeColor)
             ? (typeColors.TryGetValue(type, out var c) ? c : "AAAAAA")
             : typeColor;
-
         var typeDisplay = string.IsNullOrEmpty(type)
             ? $"[{dim}]_[/]"
             : $"[bold #{dispColor}]{Markup.Escape(type)}[/]";
@@ -258,28 +307,49 @@ public static class NewExpenseModal
             Row($"  [{dim}]Name of the expense:[/]  {Hl(field == 0 && !inItems, string.IsNullOrEmpty(name) ? "_" : name)}"),
             Row($"  [{dim}]Amount expended:[/]      {Hl(field == 1 && !inItems, amtStr)}"),
             Row($"  [{dim}]Type:[/]                 {(field == 2 && !inItems ? $"[bold {p}]{Markup.Escape(string.IsNullOrEmpty(type) ? "_" : type)}[/]" : typeDisplay)}"),
+            Row($"  [{dim}]Date:[/]                 {Hl(field == 3 && !inItems, string.IsNullOrEmpty(date) ? "_" : date)}"),
             Row(""),
         };
 
-        // Items sub-panel
+        // Items sub-panel header
         lines.Add(Sep());
-        lines.Add(Row($"  [{dim}]Items[/]"));
+        lines.Add(Row($"  [{dim}]{"Name",-20}{"Qty",5}  {"Size",-6}{"Value",12}[/]"));
         lines.Add(Sep());
 
         foreach (var item in items)
         {
-            var row = $"  [{sec}]{Markup.Escape(item.name.PadRight(24))}[/][{acc}]{Markup.Escape(item.price.ToString("C2", new System.Globalization.CultureInfo("pt-BR")).PadRight(12))}[/][{sec}]{Markup.Escape(item.unit)}[/]";
-            lines.Add(Row(row));
+            var isKg     = string.Equals(item.unit, "Kg", StringComparison.OrdinalIgnoreCase);
+            var valStr   = isKg
+                ? $"{item.itemPrice.ToString("C2", brPt)}/Kg → {item.amount.ToString("C2", brPt)}"
+                : item.amount.ToString("C2", brPt);
+            var nameStr  = item.name.Length > 20 ? item.name[..20] : item.name.PadRight(20);
+            lines.Add(Row(
+                $"  [{sec}]{Markup.Escape(nameStr)}[/]" +
+                $"[{dim}]{item.qty,5}  {Markup.Escape(item.unit.PadRight(6))}[/]" +
+                $"[{acc}]{Markup.Escape(valStr),12}[/]"));
         }
 
         // Active item entry row
         if (inItems)
         {
-            var rowEntry =
-                $"  {Hl(itemField == 0, string.IsNullOrEmpty(iName) ? "_" : iName).PadRight(24)}" +
-                $"  {Hl(itemField == 1, iAmtStr).PadRight(12)}" +
-                $"  {Hl(itemField == 2, string.IsNullOrEmpty(iUnit) ? "_" : iUnit)}";
-            lines.Add(Row(rowEntry));
+            var isKg = string.Equals(iUnit, "Kg", StringComparison.OrdinalIgnoreCase);
+            lines.Add(Row($"  [{dim}]Name:[/]  {Hl(itemField == 0, string.IsNullOrEmpty(iName) ? "_" : iName)}"));
+            lines.Add(Row($"  [{dim}]Qty:[/]   {Hl(itemField == 1, iQty.ToString())}"));
+            lines.Add(Row($"  [{dim}]Size:[/]  {Hl(itemField == 2, string.IsNullOrEmpty(iUnit) ? "Kg or Un" : iUnit)}  [{dim}](Kg or Un)[/]"));
+            if (!string.IsNullOrEmpty(iUnit))
+            {
+                if (isKg)
+                {
+                    var calcAmt = iItemPrice * iQty;
+                    lines.Add(Row(
+                        $"  [{dim}]Price/Kg:[/]  {Hl(itemField == 3, iItemPrice.ToString("C2", brPt))}" +
+                        $"  [{dim}]→ Total:[/] [{acc}]{Markup.Escape(calcAmt.ToString("C2", brPt))}[/]"));
+                }
+                else
+                {
+                    lines.Add(Row($"  [{dim}]Amount:[/]   {Hl(itemField == 3, iAmount.ToString("C2", brPt))}"));
+                }
+            }
         }
         else
         {
@@ -288,7 +358,7 @@ public static class NewExpenseModal
 
         lines.Add(Sep("╰", "╯"));
         lines.Add(Row(""));
-        lines.Add(Row($"  [{dim}]+: add item   Tab: next field   Enter: save   Esc: cancel[/]"));
+        lines.Add(Row($"  [{dim}]+: add item   Tab: next field   Enter: save/confirm item   Esc: cancel[/]"));
         lines.Add($"[{brd}]╰{new string('─', inner)}╯[/]");
 
         return lines;

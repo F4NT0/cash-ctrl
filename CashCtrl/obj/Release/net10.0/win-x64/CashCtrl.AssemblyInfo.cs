@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("cash-ctrl")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+dc6079e0c501aea38e8b2394caa96a8223800696")]
 [assembly: System.Reflection.AssemblyProductAttribute("cash-ctrl")]
 [assembly: System.Reflection.AssemblyTitleAttribute("cash-ctrl")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

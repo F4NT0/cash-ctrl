@@ -202,3 +202,4 @@ C:\Users\Gabriel_Stundner\source\repos\GITHUB\Cash-Ctrl\CashCtrl\obj\Release\net
 C:\Users\Gabriel_Stundner\source\repos\GITHUB\Cash-Ctrl\CashCtrl\obj\Release\net10.0\win-x64\cash-ctrl.pdb
 C:\Users\Gabriel_Stundner\source\repos\GITHUB\Cash-Ctrl\CashCtrl\obj\Release\net10.0\win-x64\CashCtrl.genruntimeconfig.cache
 C:\Users\Gabriel_Stundner\source\repos\GITHUB\Cash-Ctrl\CashCtrl\obj\Release\net10.0\win-x64\ref\cash-ctrl.dll
+C:\Users\Gabriel_Stundner\source\repos\GITHUB\Cash-Ctrl\CashCtrl\obj\Release\net10.0\win-x64\CashCtrl.sourcelink.json

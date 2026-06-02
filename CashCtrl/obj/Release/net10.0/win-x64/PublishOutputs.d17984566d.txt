@@ -1,0 +1,2 @@
+C:\Users\Gabriel_Stundner\source\repos\GITHUB\Cash-Ctrl\CashCtrl\dist\cash-ctrl.pdb
+C:\Users\Gabriel_Stundner\source\repos\GITHUB\Cash-Ctrl\CashCtrl\dist\cash-ctrl.exe
