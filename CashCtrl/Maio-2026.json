@@ -1,0 +1,83 @@
+{
+  "Junho 2026": {
+    "total-value": 12000,
+    "income-20260602005916": {
+      "date": "02/06/2026",
+      "total": 200,
+      "type": null,
+      "type-color": null,
+      "description": "Uber",
+      "origin": "income",
+      "details": []
+    },
+    "expense-20260602005944": {
+      "date": "02/06/2026",
+      "total": 20,
+      "type": "Fruteira",
+      "type-color": "FF6B6B",
+      "description": null,
+      "origin": "expense",
+      "details": []
+    },
+    "expense-20260602010003": {
+      "date": "02/06/2026",
+      "total": 200,
+      "type": "Mercado",
+      "type-color": "FFA94D",
+      "description": null,
+      "origin": "expense",
+      "details": []
+    },
+    "income-20260602010056": {
+      "date": "03/06/2026",
+      "total": 1200,
+      "type": null,
+      "type-color": null,
+      "description": "Venda de material",
+      "origin": "income",
+      "details": []
+    },
+    "income-20260602014626": {
+      "date": "04/06/2026",
+      "total": 10,
+      "type": null,
+      "type-color": null,
+      "description": "Aluguel",
+      "origin": "income",
+      "details": []
+    },
+    "expense-20260602014647": {
+      "date": "02/06/2026",
+      "total": 20,
+      "type": "Hotel",
+      "type-color": "FF6B6B",
+      "description": null,
+      "origin": "expense",
+      "details": []
+    },
+    "expense-20260602015359": {
+      "date": "02/06/2026",
+      "total": 20,
+      "type": "Fruteira",
+      "type-color": "FF6B6B",
+      "description": null,
+      "origin": "expense",
+      "details": [
+        {
+          "name": "Batata",
+          "amount": 2,
+          "item-price": 2,
+          "quantity": 1,
+          "size": "Kg"
+        },
+        {
+          "name": "Cenoura",
+          "amount": 5,
+          "item-price": 5,
+          "quantity": 1,
+          "size": "Un"
+        }
+      ]
+    }
+  }
+}
