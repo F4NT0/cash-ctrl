@@ -1,0 +1,31 @@
+# ── Build output ──────────────────────────────────────────────────────────────
+bin/
+obj/
+
+# ── Published / dist exe ──────────────────────────────────────────────────────
+dist/
+**/dist/
+
+# ── User data files (personal control JSON files) ─────────────────────────────
+*.json
+!**/appsettings*.json
+
+# ── Visual Studio / Rider ─────────────────────────────────────────────────────
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# ── NuGet ─────────────────────────────────────────────────────────────────────
+*.nupkg
+.nuget/
+
+# ── dotnet publish output ─────────────────────────────────────────────────────
+publish/
