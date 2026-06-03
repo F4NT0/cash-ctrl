@@ -37,11 +37,10 @@ public static class WelcomeScreen
         if (controls.Count == 0)
         {
             AnsiConsole.Clear();
-            var choice = RunSplash(new[]
-            {
-                ("Create new control here", true),
-                ("Exit",                   true),
-            }.ToList(), notice: $"No controls found in {directory}");
+            var choice = RunPanel(
+                "Select the control to open",
+                new[] { ("Create new control here", true), ("Exit", true) }.ToList(),
+                notice: $"No controls found in {directory}");
 
             AnsiConsole.Clear();
             if (choice == "Create new control here")
@@ -53,7 +52,7 @@ public static class WelcomeScreen
         names.Add("← Back");
 
         AnsiConsole.Clear();
-        var selected = RunSplash(names.Select(n => (n, true)).ToList());
+        var selected = RunPanel("Select the control to open", names.Select(n => (n, true)).ToList());
         AnsiConsole.Clear();
 
         if (selected == "← Back" || selected is null) return;
@@ -78,11 +77,10 @@ public static class WelcomeScreen
         if (favorites.Count == 0 && local.Count == 0)
         {
             AnsiConsole.Clear();
-            var fallback = RunSplash(new[]
-            {
-                ("Create new control", true),
-                ("← Back",            true),
-            }.ToList(), notice: "No saved controls found.");
+            var fallback = RunPanel(
+                "Select the control to open",
+                new[] { ("Create new control", true), ("← Back", true) }.ToList(),
+                notice: "No saved controls found.");
             AnsiConsole.Clear();
 
             if (fallback == "Create new control")
@@ -119,7 +117,7 @@ public static class WelcomeScreen
         entries.Add(("← Back", true));
 
         AnsiConsole.Clear();
-        var selected = RunSplash(entries);
+        var selected = RunPanel("Select the control to open", entries);
         AnsiConsole.Clear();
 
         if (selected is null || selected.Trim() == "← Back")
@@ -295,6 +293,130 @@ public static class WelcomeScreen
 
         // Park cursor off-screen to prevent blinking on last line
         try { Console.SetCursorPosition(0, topRow + entries.Count + 2); } catch { }
+    }
+
+    // ── Centered panel selector (used for open-control flows) ────────────────
+
+    private static string? RunPanel(
+        string title,
+        List<(string label, bool selectable)> entries,
+        string? notice = null)
+    {
+        int idx = entries.FindIndex(e => e.selectable);
+        if (idx < 0) return null;
+
+        while (true)
+        {
+            DrawPanelSelector(title, entries, idx, notice);
+
+            var key = Console.ReadKey(true);
+            if (key.Key == ConsoleKey.Escape) return null;
+            if (key.Key == ConsoleKey.Enter)  return entries[idx].label;
+
+            if (key.Key == ConsoleKey.UpArrow)
+            {
+                int prev = idx - 1;
+                while (prev >= 0 && !entries[prev].selectable) prev--;
+                if (prev >= 0) idx = prev;
+            }
+            else if (key.Key == ConsoleKey.DownArrow)
+            {
+                int next = idx + 1;
+                while (next < entries.Count && !entries[next].selectable) next++;
+                if (next < entries.Count) idx = next;
+            }
+        }
+    }
+
+    private static void DrawPanelSelector(
+        string title,
+        List<(string label, bool selectable)> entries,
+        int selected,
+        string? notice)
+    {
+        int w  = Math.Max(Console.WindowWidth  > 0 ? Console.WindowWidth  : 80, 24);
+        int h  = Math.Max(Console.WindowHeight > 0 ? Console.WindowHeight : 24, 8);
+
+        // Panel width: wide enough for the longest entry + padding, max 60
+        int maxLabel = entries.Max(e => e.label.Length);
+        int pw  = Math.Min(60, Math.Max(38, maxLabel + 8));
+        pw      = Math.Min(pw, w - 2);
+        int inner = pw - 2;
+        int px  = Math.Max(0, (w - pw) / 2);
+
+        var brd  = $"#{C(Theme.Border)}";
+        var foc  = $"#{C(Theme.Focus)}";
+        var dim  = $"#{C(Theme.Muted)}";
+        var pri  = $"#{C(Theme.Primary)}";
+        var sec  = $"#{C(Theme.Secondary)}";
+        var warn = $"#{C(Theme.Warning)}";
+
+        string Row(string markupContent, int plainLen)
+        {
+            int pad = Math.Max(0, inner - plainLen);
+            return $"[{brd}]│[/]{markupContent}{new string(' ', pad)}[{brd}]│[/]";
+        }
+
+        var lines = new List<string>();
+        // Title border
+        var titlePlain = $" {title} ";
+        int dashL = Math.Max(0, (inner - titlePlain.Length) / 2);
+        int dashR = Math.Max(0, inner - titlePlain.Length - dashL);
+        lines.Add($"[{brd}]╭{new string('─', dashL)}[/][bold {foc}]{Markup.Escape(titlePlain)}[/][{brd}]{new string('─', dashR)}╮[/]");
+        lines.Add(Row("", 0));
+
+        if (notice is not null)
+        {
+            var n2 = notice.Length > inner - 2 ? notice[..(inner - 2)] : notice;
+            lines.Add(Row($"  [{dim}]{Markup.Escape(n2)}[/]", 2 + n2.Length));
+            lines.Add(Row("", 0));
+        }
+
+        foreach (var (label, selectable) in entries)
+        {
+            string mu; int pl;
+            if (!selectable)
+            {
+                var lbl = label.Length > inner - 2 ? label[..(inner - 2)] : label;
+                mu = $"  [{dim}]{Markup.Escape(lbl)}[/]"; pl = 2 + lbl.Length;
+            }
+            else if (entries.IndexOf((label, selectable)) == selected)
+            {
+                var lbl = label.Length > inner - 4 ? label[..(inner - 4)] : label;
+                mu = $"  [bold {pri}]> {Markup.Escape(lbl)}[/]"; pl = 4 + lbl.Length;
+            }
+            else
+            {
+                var lbl = label.Length > inner - 4 ? label[..(inner - 4)] : label;
+                mu = $"  [{sec}]  {Markup.Escape(lbl)}[/]"; pl = 4 + lbl.Length;
+            }
+            lines.Add(Row(mu, pl));
+        }
+
+        lines.Add(Row("", 0));
+        const string hint = "↑↓: select   Enter: confirm   Esc: back";
+        var hintTrunc = hint.Length > inner - 2 ? hint[..(inner - 2)] : hint;
+        lines.Add(Row($"  [{dim}]{Markup.Escape(hintTrunc)}[/]", 2 + hintTrunc.Length));
+        lines.Add(Row("", 0));
+        lines.Add($"[{brd}]╰{new string('─', inner)}╯[/]");
+
+        int mh = lines.Count;
+        int my = Math.Max(0, (h - mh) / 2);
+
+        Console.CursorVisible = false;
+        // Clear screen
+        Console.SetCursorPosition(0, 0);
+        for (int r = 0; r < h; r++)
+        {
+            try { Console.SetCursorPosition(0, r); } catch { }
+            Console.Write(new string(' ', w));
+        }
+
+        for (int i = 0; i < lines.Count; i++)
+        {
+            try { Console.SetCursorPosition(px, my + i); } catch { }
+            AnsiConsole.Markup(lines[i]);
+        }
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

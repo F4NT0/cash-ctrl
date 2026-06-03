@@ -197,6 +197,21 @@ public static class MainScreen
                         controlsDir = Path.GetDirectoryName(control.FilePath) ?? controlsDir;
                     }
                 }
+
+                // N: create new control in the same directory
+                if (k.KeyChar is 'n' or 'N')
+                {
+                    DrawAll(control, siblingControls, controlsIdx, focus, entries, listIdx, listScroll, isDeleting, deleteKeys, calMonthIdx, filterCol, filterText, isFiltering);
+                    var newPath = await NewControlModal.ShowAsync(controlsDir);
+                    if (newPath is not null)
+                    {
+                        siblingControls = ControlService.FindControlsInDirectory(controlsDir);
+                        var idx = siblingControls.IndexOf(newPath);
+                        if (idx >= 0) controlsIdx = idx;
+                        var nc = await ControlService.LoadControlAsync(newPath);
+                        if (nc is not null) control = nc;
+                    }
+                }
             }
 
             if (focus == MainFocus.List)
@@ -429,7 +444,22 @@ public static class MainScreen
             ? (IRenderable)new Markup(string.Join("\n", rows))
             : new Markup($"[{Hex(Theme.Muted)}](empty)[/]");
 
-        return MakePanel(content, "Controls", focused);
+        var borderColor = focused ? Theme.Focus : Theme.Border;
+        var titleColor  = focused ? Theme.Focus : Theme.Muted;
+        var titleText   = $"[{Hex(titleColor)}]Controls[/]";
+        var hintMarkup  = focused
+            ? $"  [{Hex(Theme.Muted)}]↑↓: select  Enter: open  N: new[/]"
+            : "";
+
+        var panel = new Panel(content)
+        {
+            Border      = BoxBorder.Rounded,
+            BorderStyle = new Style(borderColor),
+            Padding     = new Padding(1, 0),
+            Expand      = true,
+        };
+        panel.Header = new PanelHeader($"{titleText}{hintMarkup}", Justify.Left);
+        return panel;
     }
 
     private static Panel MakeChartPanel(ControlPeriod? period, bool focused)
