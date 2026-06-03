@@ -129,6 +129,9 @@ public static class InstallerScreen
             // Add to user PATH via registry
             AddToUserPath(installDir);
 
+            // Persist installed version
+            CashCtrl.Services.VersionService.SaveInstalledVersion();
+
             return true;
         }
         catch

@@ -11,12 +11,30 @@ try { Console.CursorVisible = false; } catch { }
 
 var cliArgs = Environment.GetCommandLineArgs().Skip(1).ToArray();
 
+// Kick off remote version check in background (non-blocking)
+CashCtrl.Services.VersionService.StartBackgroundCheck();
+
 try
 {
     if (cliArgs.Length == 0)
     {
         // ── cash-ctrl  →  main welcome menu ─────────────────────────────────
         await WelcomeScreen.ShowAsync();
+    }
+    else if (cliArgs[0] is "--version" or "-v")
+    {
+        // ── cash-ctrl --version  →  print version ───────────────────────────
+        var p = $"#{Theme.Primary.R:X2}{Theme.Primary.G:X2}{Theme.Primary.B:X2}";
+        var m = $"#{Theme.Muted.R:X2}{Theme.Muted.G:X2}{Theme.Muted.B:X2}";
+        Console.OutputEncoding = System.Text.Encoding.UTF8;
+        AnsiConsole.MarkupLine($"[bold {p}]Cash-Ctrl[/] [bold white]{AppVersion.Current}[/]");
+        AnsiConsole.MarkupLine($"[{m}]Love you Lili [/][red]\u2665[/]");
+        AnsiConsole.MarkupLine($"[{m}]Run cash-ctrl --help for more information[/]");
+    }
+    else if (cliArgs[0] is "--update" or "update")
+    {
+        // ── cash-ctrl --update  →  download + install latest release ────────
+        await VersionService.PerformUpdateAsync();
     }
     else if (cliArgs[0] is "--help" or "-h" or "help")
     {
@@ -34,6 +52,8 @@ try
         AnsiConsole.MarkupLine($"  [{p}]cash-ctrl[/] [{s}]<name>[/]        [{m}]Open or create a control by name in the current directory[/]");
         AnsiConsole.MarkupLine($"  [{p}]cash-ctrl[/] [{s}].[/]             [{m}]Browse controls in the current directory[/]");
         AnsiConsole.MarkupLine($"  [{p}]cash-ctrl[/] [{s}]--install[/]     [{m}]Run the TUI installer (add cash-ctrl to PATH)[/]");
+        AnsiConsole.MarkupLine($"  [{p}]cash-ctrl[/] [{s}]--update[/]      [{m}]Download and install the latest version[/]");
+        AnsiConsole.MarkupLine($"  [{p}]cash-ctrl[/] [{s}]--version[/]     [{m}]Show version information[/]");
         AnsiConsole.MarkupLine($"  [{p}]cash-ctrl[/] [{s}]--help[/]        [{m}]Show this help message[/]");
         Console.WriteLine();
         AnsiConsole.MarkupLine($"[bold {a}]EXAMPLES[/]");

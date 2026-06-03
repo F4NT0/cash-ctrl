@@ -1,4 +1,8 @@
-# Cash-Ctrl
+<h1 align="center">
+  <img src="images/logo.png" alt="cash-ctrl" width="200" />
+  <br>
+  Resterm
+</h1>
 
 > Personal finance control tool — terminal UI powered by Spectre.Console.
 

@@ -22,7 +22,12 @@ public static class CreateControlScreen
 
             var key = Console.ReadKey(true);
 
-            if (key.Key == ConsoleKey.Escape) return;
+            if (key.Key == ConsoleKey.Escape)
+            {
+                AnsiConsole.Clear();
+                await WelcomeScreen.ShowAsync();
+                return;
+            }
 
             if (key.Key == ConsoleKey.Tab)
             {
@@ -86,121 +91,81 @@ public static class CreateControlScreen
 
     private static void DrawModal(string name, decimal amount, int field, string error, string directory)
     {
-        int w     = Math.Max(Console.WindowWidth,  40);
-        int h     = Math.Max(Console.WindowHeight, 20);
-        int mw    = Math.Min(62, w - 4);
-        int mx    = (w - mw) / 2;
-        int inner = mw - 2;
+        int w = Math.Max(Console.WindowWidth  > 0 ? Console.WindowWidth  : 80, 40);
+        int h = Math.Max(Console.WindowHeight > 0 ? Console.WindowHeight : 24, 10);
 
-        var brd  = $"#{Theme.Border.R:X2}{Theme.Border.G:X2}{Theme.Border.B:X2}";
         var p    = $"#{Theme.Primary.R:X2}{Theme.Primary.G:X2}{Theme.Primary.B:X2}";
         var sec  = $"#{Theme.Secondary.R:X2}{Theme.Secondary.G:X2}{Theme.Secondary.B:X2}";
         var dim  = $"#{Theme.Muted.R:X2}{Theme.Muted.G:X2}{Theme.Muted.B:X2}";
         var acc  = $"#{Theme.Accent.R:X2}{Theme.Accent.G:X2}{Theme.Accent.B:X2}";
         var foc  = $"#{Theme.Focus.R:X2}{Theme.Focus.G:X2}{Theme.Focus.B:X2}";
+        var brd  = $"#{Theme.Border.R:X2}{Theme.Border.G:X2}{Theme.Border.B:X2}";
         var red  = "#FF6B6B";
         var info = $"#{Theme.Info.R:X2}{Theme.Info.G:X2}{Theme.Info.B:X2}";
 
-        // Row builder with known plain-text length
-        string Row(string mu, int pl)
-        {
-            int pad = Math.Max(0, inner - pl);
-            return $"[{brd}]│[/]{mu}{new string(' ', pad)}[{brd}]│[/]";
-        }
-
-        // ── Compute plain widths and truncate before building markup ──────────
-        const int prefixLen  = 16; // "  Control name:  " or "  Total money:   "
-        const int pathPrefix = 12; // "  Location:   "
-
-        int nameMax = inner - prefixLen - (field == 0 ? 1 : 0);
-        var nameFit = name.Length > nameMax && nameMax > 0 ? name[^Math.Max(0, nameMax)..] : name;
-
-        var amtStr  = amount.ToString("C2", BrCulture);
-        int amtMax  = inner - prefixLen - (field == 1 ? 1 : 0);
-        var amtFit  = amtStr.Length > amtMax && amtMax > 0 ? amtStr[^Math.Max(0, amtMax)..] : amtStr;
+        // Neutralize home dir
+        var home       = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var displayDir = directory.StartsWith(home, StringComparison.OrdinalIgnoreCase)
+                         ? "~" + directory[home.Length..]
+                         : directory;
 
         // Path preview
-        var fileSlug   = string.IsNullOrWhiteSpace(name) ? "_" : name.Trim().Replace(' ', '-');
-        var filePart   = fileSlug + ".json";
-        var sep        = Path.DirectorySeparatorChar.ToString();
-        int pathBudget = inner - pathPrefix;
-        string dirFit, fileFit;
-        if (directory.Length + sep.Length + filePart.Length <= pathBudget)
-        { dirFit = directory + sep; fileFit = filePart; }
-        else
-        {
-            int dirBudget = pathBudget - filePart.Length;
-            dirFit  = dirBudget > 2 ? "…" + (directory + sep)[^(dirBudget - 1)..] : sep;
-            fileFit = filePart;
-        }
-        int pathPlainLen = pathPrefix + dirFit.Length + fileFit.Length;
+        var fileSlug  = string.IsNullOrWhiteSpace(name) ? "_" : name.Trim().Replace(' ', '-');
+        var filePart  = fileSlug + ".json";
+        var pathFull  = displayDir.TrimEnd(Path.DirectorySeparatorChar)
+                        + Path.DirectorySeparatorChar + filePart;
 
-        // ── Build markup ──────────────────────────────────────────────────────
-        var nameLabelMu = field == 0 ? $"[bold {foc}]Control name:[/]" : $"[{dim}]Control name:[/]";
-        string nameValMu; int nameValLen;
-        if (field == 0)
-        { nameValMu = $"[bold {p}]{Markup.Escape(nameFit)}[/][bold {foc}]|[/]"; nameValLen = nameFit.Length + 1; }
-        else if (string.IsNullOrWhiteSpace(nameFit))
-        { nameValMu = $"[{dim}]_[/]"; nameValLen = 1; }
-        else
-        { nameValMu = $"[{sec}]{Markup.Escape(nameFit)}[/]"; nameValLen = nameFit.Length; }
+        // Field values
+        var amtStr = amount.ToString("C2", BrCulture);
 
-        var amtLabelMu = field == 1 ? $"[bold {foc}]Total money: [/]" : $"[{dim}]Total money: [/]";
-        string amtValMu; int amtValLen;
-        if (field == 1)
-        { amtValMu = $"[bold {acc}]{Markup.Escape(amtFit)}[/][bold {foc}]|[/]"; amtValLen = amtFit.Length + 1; }
-        else
-        { amtValMu = $"[{acc}]{Markup.Escape(amtFit)}[/]"; amtValLen = amtFit.Length; }
+        string nameLabelMu = field == 0 ? $"[bold {foc}]Control name:[/]" : $"[{dim}]Control name:[/]";
+        string nameValMu   = field == 0
+            ? $"[bold {p}]{Markup.Escape(name)}[/][bold {foc}]|[/]"
+            : (string.IsNullOrWhiteSpace(name) ? $"[{dim}]_[/]" : $"[{sec}]{Markup.Escape(name)}[/]");
 
-        const string hintText = "Tab: next field   Enter: create   Esc: cancel";
-        string hintMu; int hintLen;
-        if (string.IsNullOrEmpty(error))
-        { hintMu = $"  [{dim}]{hintText}[/]"; hintLen = 2 + hintText.Length; }
-        else
-        {
-            var e2 = error.Length > inner - 2 ? error[..(inner - 2)] : error;
-            hintMu = $"  [bold {red}]{Markup.Escape(e2)}[/]"; hintLen = 2 + e2.Length;
-        }
+        string amtLabelMu = field == 1 ? $"[bold {foc}]Total money: [/]" : $"[{dim}]Total money: [/]";
+        string amtValMu   = field == 1
+            ? $"[bold {acc}]{Markup.Escape(amtStr)}[/][bold {foc}]|[/]"
+            : $"[{acc}]{Markup.Escape(amtStr)}[/]";
 
-        // Title row with centered label
-        const string titleText = " Creating new Control ";
-        int dashL = Math.Max(0, (inner - titleText.Length) / 2);
-        int dashR = Math.Max(0, inner - titleText.Length - dashL);
+        // Path markup — dim dir, bright filename
+        var dirPart  = Path.GetDirectoryName(pathFull) + Path.DirectorySeparatorChar.ToString();
+        var fileOnly = Path.GetFileName(pathFull);
+        string pathMu = $"[{dim}]{Markup.Escape(dirPart)}[/][bold {info}]{Markup.Escape(fileOnly)}[/]";
 
+        string hintMu = string.IsNullOrEmpty(error)
+            ? $"[{dim}]Tab: next field   Enter: create   Esc: cancel[/]"
+            : $"[bold {red}]{Markup.Escape(error)}[/]";
+
+        // Lines to render (centered)
         var lines = new List<string>
         {
-            $"[{brd}]╭{new string('─', dashL)}[/][bold {foc}]{titleText}[/][{brd}]{new string('─', dashR)}╮[/]",
-            Row("", 0),
-            Row($"  {nameLabelMu}  {nameValMu}",    prefixLen + nameValLen),
-            Row("", 0),
-            Row($"  [{dim}]Location:    [/][{dim}]{Markup.Escape(dirFit)}[/][bold {info}]{Markup.Escape(fileFit)}[/]", pathPlainLen),
-            Row("", 0),
-            Row($"  {amtLabelMu}  {amtValMu}",      prefixLen + amtValLen),
-            Row("", 0),
-            Row($"  [{brd}]{new string('─', inner - 2)}[/]", inner - 2),
-            Row("", 0),
-            Row(hintMu, hintLen),
-            Row("", 0),
-            $"[{brd}]╰{new string('─', inner)}╯[/]",
+            $"[bold {foc}]Creating new Control[/]",
+            "",
+            $"{nameLabelMu}  {nameValMu}",
+            "",
+            $"[{dim}]Location:    [/]{pathMu}",
+            "",
+            $"{amtLabelMu}  {amtValMu}",
+            "",
+            $"[{brd}]{new string('─', Math.Min(50, w - 4))}[/]",
+            "",
+            hintMu,
         };
 
-        int mh = lines.Count;
-        int my = Math.Max(0, (h - mh) / 2);
+        int contentH = lines.Count;
+        int startY   = Math.Max(0, (h - contentH) / 2);
 
         Console.CursorVisible = false;
-        for (int r = 0; r < h; r++)
-        {
-            try { Console.SetCursorPosition(0, r); } catch { }
-            Console.Write(new string(' ', w));
-        }
+        AnsiConsole.Clear();
 
         for (int i = 0; i < lines.Count; i++)
         {
-            try { Console.SetCursorPosition(mx, my + i); } catch { }
-            AnsiConsole.Markup(lines[i]);
             var plain = System.Text.RegularExpressions.Regex.Replace(lines[i], @"\[.*?\]", "");
-            int leftover = Math.Max(0, w - mx - plain.Length);
-            if (leftover > 0) Console.Write(new string(' ', leftover));
+            int pad   = Math.Max(0, (w - plain.Length) / 2);
+            try { Console.SetCursorPosition(0, startY + i); } catch { }
+            Console.Write(new string(' ', pad));
+            AnsiConsole.Markup(lines[i]);
         }
     }
 }

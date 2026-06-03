@@ -158,12 +158,13 @@ public static class WelcomeScreen
         int blankAfterDesc = 2;
         int ruleRows       = 1;
         int blankAfterRule = 1;
+        int versionRows    = 1; // version label or update banner
         int noticeRows     = notice is null ? 0 : 2;
         int menuRows       = entries.Count + 1; // +1 leading blank
         int hintsRows      = 2;
 
         int staticH  = figletLines + subtitleRows + descRows + blankAfterDesc
-                       + ruleRows + blankAfterRule + noticeRows;
+                       + ruleRows + blankAfterRule + versionRows + noticeRows;
         int dynamicH = menuRows + hintsRows;
         int contentH = staticH + dynamicH;
         int topPad   = Math.Max(0, (h - contentH) / 2);
@@ -240,6 +241,12 @@ public static class WelcomeScreen
         // Rule
         AnsiConsole.Write(new Rule { Style = new Style(Theme.Border) });
         Console.WriteLine();
+
+        // Version label or update banner
+        if (CashCtrl.Services.VersionService.IsOutdated)
+            WriteCentered($"[bold yellow]\u26a0 New version available ({CashCtrl.Services.VersionService.LatestVersion}), run cash-ctrl --update to update[/]", w);
+        else
+            WriteCentered($"[#{C(Theme.Muted)}]{CashCtrl.AppVersion.Current}[/]", w);
 
         // Optional notice
         if (notice is not null)

@@ -389,6 +389,13 @@ public static class MainScreen
 
         AnsiConsole.Write(layout);
 
+        // -> UPDATE BANNER (shown when a newer version is detected)
+        if (CashCtrl.Services.VersionService.IsOutdated)
+        {
+            AnsiConsole.MarkupLine(
+                $" [bold yellow]\u26a0 New version available ({CashCtrl.Services.VersionService.LatestVersion}), run cash-ctrl --update to update[/]");
+        }
+
         // -> AVAILABLE COMMANDS
         var fk = Hex(Theme.Focus);
         int termW = Math.Max(20, Console.WindowWidth);
