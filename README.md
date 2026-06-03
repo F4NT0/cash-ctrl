@@ -4,7 +4,9 @@
   CASH-CTRL
 </h1>
 
-> Command-line finance control software
+<h2 align="center"> 
+    Command-line finance control software
+</h2>
 
 ---
 
