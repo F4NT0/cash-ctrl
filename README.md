@@ -8,7 +8,7 @@
 
 **Cash-Ctrl** is a minimalist TUI (Terminal User Interface) application for tracking personal expenses and income, stored as structured JSON files called *controls*.
 
-Each control represents a financial period (e.g., "Junho 2026") and holds a starting balance, expenses, and incomes. The app runs fully in the terminal with a clean purple-on-black aesthetic.
+Each control represents a financial period (e.g., "June 2026") and holds a starting balance, expenses, and incomes. The app runs fully in the terminal with a clean purple-on-black aesthetic.
 
 ---
 
@@ -16,7 +16,7 @@ Each control represents a financial period (e.g., "Junho 2026") and holds a star
 
 ### Option 1 — TUI installer (recommended)
 
-Download `cash-ctrl.exe` from `dist/`, place it anywhere, then run:
+Download `cash-ctrl.exe` from the [release page](), place it anywhere, then run:
 
 ```powershell
 .\cash-ctrl.exe --install
@@ -24,8 +24,8 @@ Download `cash-ctrl.exe` from `dist/`, place it anywhere, then run:
 
 The TUI installer will:
 1. Let you choose the install directory (default: `%LOCALAPPDATA%\CashCtrl`)
-2. Copy `cash-ctrl.exe` to that directory
-3. Add the directory to your **user PATH** automatically
+2. Copy `cash-ctrl.exe` to that directory.
+3. Add the directory to your **user PATH** automatically.
 
 Open a new terminal and you can use `cash-ctrl` from anywhere.
 
@@ -40,6 +40,7 @@ Open a new terminal and you can use `cash-ctrl` from anywhere.
 
 ```powershell
 # Requires .NET 10 SDK
+# Run this command in the root folder from the repository
 dotnet publish CashCtrl\CashCtrl.csproj -c Release -o dist
 .\dist\cash-ctrl.exe --install
 ```
@@ -49,19 +50,19 @@ dotnet publish CashCtrl\CashCtrl.csproj -c Release -o dist
 ## Usage
 
 ```
-cash-ctrl                  Open the main welcome menu
-cash-ctrl <name>           Open or create a control by name in the current directory
-cash-ctrl .                Browse controls in the current directory
-cash-ctrl --install        Run the TUI installer (add cash-ctrl to PATH)
-cash-ctrl --help           Show this help message
+cash-ctrl             Open the main welcome menu
+cash-ctrl <name>      Open or create a control by name in the current directory
+cash-ctrl .           Browse controls in the current directory
+cash-ctrl --install   Run the TUI installer (add cash-ctrl to PATH)
+cash-ctrl --help      Show this help message
 ```
 
 ### Examples
 
 ```powershell
-cash-ctrl                  # opens main menu
-cash-ctrl Junho-2026       # opens or creates Junho-2026.json in the current directory
-cash-ctrl .                # browse all controls in the current directory
+cash-ctrl              # opens main menu
+cash-ctrl June-2026    # opens or creates Junho-2026.json in the current directory
+cash-ctrl .            # browse all controls in the current directory
 ```
 
 ---
@@ -78,25 +79,36 @@ cash-ctrl .                # browse all controls in the current directory
 ## Screens
 
 ### Welcome screen
+
 Shows the `CASH-CTRL` figlet logo and a keyboard-navigable menu:
 - **Open controls…** — select from recently opened or local controls
 - **Create new control** — wizard to create a new `.json` control file
 
 Navigation: `↑↓` select · `Enter` confirm · `Esc` quit
 
+> Add image here
+
 ### Create new Control
+
 Step-by-step form:
-1. Control name (becomes the filename, e.g. `Junho-2026.json`)
+1. Control name (becomes the filename, e.g. `June-2026.json`)
 2. Auto-preview of the save path
 3. Starting balance (in BRL)
 
+> Add image here
+
 ### Open Control
+
 Preview panel showing the control name, total balance, and file path. Confirm with `Enter`, cancel with `Esc`.
 
+> Add image here
+
 ### Main screen
+
 Full-screen TUI with 3 columns at the top, a summary bar in the middle, and an entry list at the bottom.
 
 **Top panels:**
+
 - **Controls** — navigate between control files in the same directory
 - **Expense types** — bar chart of spending by category
 - **Calendar** — monthly calendar with colour-coded days (red = expense, green = income, purple = both)
@@ -104,6 +116,8 @@ Full-screen TUI with 3 columns at the top, a summary bar in the middle, and an e
 **Middle bar:** Total Amount · Total Expenses · Available value · Clock
 
 **Entry list:** Date · Name · Type · Amount · Origin — sortable, navigable, with detail view and delete mode
+
+> Add image here
 
 #### Main screen keyboard shortcuts
 
@@ -120,20 +134,33 @@ Full-screen TUI with 3 columns at the top, a summary bar in the middle, and an e
 | `D` | Enter delete mode (in list) |
 | `Space` | Mark entry for deletion (in delete mode) |
 | `Esc` | Cancel / exit focus / quit |
+| F | Filter inside the list (use Tab to change columns |
+
 
 ### New Expense modal
-- Fields: **Name · Amount · Type · Date** (Tab to cycle)
-- Press `+` to add line items with quantity, unit (Kg / Un), and per-item price
-- Amount is calculated automatically for Kg items
+
+- Fields: **Name · Amount · Type · Date** (Tab to cycle).
+- Press `+` to add line items with quantity, unit (Kg / Un), and per-item price.
+- Amount is calculated automatically for Kg items.
+
+> Add images here
 
 ### New Income modal
+
 - Fields: **Amount added · Date · Origin** (Tab to cycle)
+- **Origin** is a tittle to explain from where the income comes.
+
+> Add images here
 
 ### Edit Total Balance (`I`)
-Small modal to correct the initial `total-value` of the current period. Takes effect immediately.
+
+- Small modal to correct the initial `total-value` of the current period. Takes effect immediately.
+
+> Add images here
 
 ### Expense Detail modal
-Read-only view of all line items for an expense entry (name, quantity, size, unit price, amount).
+
+- Read-only view of all line items for an expense entry (name, quantity, size, unit price, amount).
 
 ---
 
@@ -141,18 +168,20 @@ Read-only view of all line items for an expense entry (name, quantity, size, uni
 
 Controls are plain `.json` files stored wherever you create them.
 
+- It's simple to verify and easier to store.
+
 ```json
 {
-  "Junho 2026": {
-    "total-value": 25000.00,
-    "Fruteirão": {
-      "date": "01/06/2026",
-      "total": 25.00,
-      "type": "fruteira",
-      "type-color": "#FF6B6B",
-      "description": "Fruteirão",
-      "origin": "expense",
-      "details": [
+  "June 2026": {               
+    "total-value": 500.00,     
+    "Fruit Srop": {            
+      "date": "01/06/2026",      
+      "total": 25.00,          
+      "type": "market",           
+      "type-color": "#FF6B6B",    
+      "description": "Bought fruits",
+      "origin": "expense",       
+      "details": [             
         {
           "name": "banana",
           "amount": 10.00,
@@ -162,10 +191,10 @@ Controls are plain `.json` files stored wherever you create them.
         }
       ]
     },
-    "Salário": {
+    "Salary": {
       "date": "05/06/2026",
       "total": 5000.00,
-      "description": "Salário",
+      "description": "August Salary",
       "origin": "income",
       "details": []
     }
@@ -185,7 +214,7 @@ Favorites and recents are stored in: `%APPDATA%\CashCtrl\favorites.json`
 
 ---
 
-## Project structure
+## Project structure (If it wants to understand the project)
 
 ```
 Cash-Ctrl/
@@ -217,3 +246,5 @@ Cash-Ctrl/
     └── Details/
         └── Intro.md
 ```
+
+

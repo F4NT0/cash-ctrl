@@ -93,6 +93,14 @@ public static class ControlService
         await File.WriteAllTextAsync(FavoritesPath, json);
     }
 
+    public static async Task RemoveFromFavoritesAsync(string filePath)
+    {
+        var favorites = GetFavorites();
+        favorites.RemoveAll(f => string.Equals(f.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+        var json = JsonSerializer.Serialize(favorites, JsonOptions.Default);
+        await File.WriteAllTextAsync(FavoritesPath, json);
+    }
+
     public static async Task SaveExpenseAsync(ControlFile control, string periodKey, ControlEntry expense)
     {
         var period = control.Periods.GetValueOrDefault(periodKey)
@@ -124,6 +132,19 @@ public static class ControlService
             foreach (var k in keysToRemove)
                 period.ExtensionData.Remove(k);
 
+        await SaveControlAsync(control, periodDict, periodKey);
+    }
+
+    public static async Task UpdateEntryAsync(
+        ControlFile control, string periodKey, string entryKey, ControlEntry updated)
+    {
+        var period = control.Periods.GetValueOrDefault(periodKey);
+        if (period is null) return;
+
+        var periodDict = BuildPeriodDict(period);
+        periodDict[entryKey] = updated;
+
+        control.Periods[periodKey] = period;
         await SaveControlAsync(control, periodDict, periodKey);
     }
 

@@ -241,16 +241,17 @@ public static class NewExpenseModal
         string iName, int iQty, string iUnit, decimal iItemPrice, decimal iAmount,
         Dictionary<string, string> typeColors)
     {
-        int w  = Math.Max(Console.WindowWidth,  60);
-        int h  = Math.Max(Console.WindowHeight, 24);
-        int mw = Math.Min(72, w - 4);
-        int mh = 18 + items.Count;
-        int mx = (w - mw) / 2;
-        int my = Math.Max(0, (h - mh) / 2);
+        int w  = Math.Max(Console.WindowWidth  > 0 ? Console.WindowWidth  : 80, 50);
+        int h  = Math.Max(Console.WindowHeight > 0 ? Console.WindowHeight : 24, 12);
+        int mw = Math.Min(68, w - 4);
 
         var lines = BuildLines(name, amount, type, typeColor, date, items,
                                field, inItems, itemField,
                                iName, iQty, iUnit, iItemPrice, iAmount, typeColors, mw);
+
+        int mh = lines.Count;
+        int mx = (w - mw) / 2;
+        int my = Math.Max(0, (h - mh) / 2);
 
         Console.CursorVisible = false;
         for (int i = 0; i < lines.Count; i++)
@@ -269,16 +270,19 @@ public static class NewExpenseModal
         string iName, int iQty, string iUnit, decimal iItemPrice, decimal iAmount,
         Dictionary<string, string> typeColors, int mw)
     {
-        var p   = $"#{Theme.Primary.R:X2}{Theme.Primary.G:X2}{Theme.Primary.B:X2}";
-        var sec = $"#{Theme.Secondary.R:X2}{Theme.Secondary.G:X2}{Theme.Secondary.B:X2}";
-        var dim = $"#{Theme.Muted.R:X2}{Theme.Muted.G:X2}{Theme.Muted.B:X2}";
-        var acc = $"#{Theme.Accent.R:X2}{Theme.Accent.G:X2}{Theme.Accent.B:X2}";
-        var brd = $"#{110:X2}{100:X2}{160:X2}";
-        var inner = mw - 2;
+        var p    = $"#{Theme.Primary.R:X2}{Theme.Primary.G:X2}{Theme.Primary.B:X2}";
+        var foc  = $"#{Theme.Focus.R:X2}{Theme.Focus.G:X2}{Theme.Focus.B:X2}";
+        var sec  = $"#{Theme.Secondary.R:X2}{Theme.Secondary.G:X2}{Theme.Secondary.B:X2}";
+        var dim  = $"#{Theme.Muted.R:X2}{Theme.Muted.G:X2}{Theme.Muted.B:X2}";
+        var acc  = $"#{Theme.Accent.R:X2}{Theme.Accent.G:X2}{Theme.Accent.B:X2}";
+        var warn = $"#{Theme.Warning.R:X2}{Theme.Warning.G:X2}{Theme.Warning.B:X2}";
+        var brd  = "#6E64A0";
+        int inner = mw - 2;
 
+        // Active field = bold focus color + cursor block; inactive = secondary
         string Hl(bool active, string s) => active
-            ? $"[bold {p}]{Markup.Escape(s)}[/]"
-            : $"[{sec}]{Markup.Escape(s)}[/]";
+            ? $"[bold {foc}]{Markup.Escape(s.Length > 0 ? s : "")}[/][bold {warn}]|[/]"
+            : $"[{sec}]{Markup.Escape(s.Length > 0 ? s : "_")}[/]";
 
         string Row(string content)
         {
@@ -290,8 +294,8 @@ public static class NewExpenseModal
         string Sep(string left = "├", string right = "┤") =>
             $"[{brd}]{left}{new string('─', inner)}{right}[/]";
 
-        var brPt    = new System.Globalization.CultureInfo("pt-BR");
-        var amtStr  = amount.ToString("C2", brPt);
+        var brPt   = new System.Globalization.CultureInfo("pt-BR");
+        var amtStr = amount.ToString("C2", brPt);
 
         var dispColor = string.IsNullOrEmpty(typeColor)
             ? (typeColors.TryGetValue(type, out var c) ? c : "AAAAAA")
@@ -300,65 +304,69 @@ public static class NewExpenseModal
             ? $"[{dim}]_[/]"
             : $"[bold #{dispColor}]{Markup.Escape(type)}[/]";
 
+        // ── Header fields ─────────────────────────────────────────────────────
         var lines = new List<string>
         {
             $"[{brd}]╭{new string('─', inner)}╮[/]",
-            Row(""),
-            Row($"  [{dim}]Name of the expense:[/]  {Hl(field == 0 && !inItems, string.IsNullOrEmpty(name) ? "_" : name)}"),
-            Row($"  [{dim}]Amount expended:[/]      {Hl(field == 1 && !inItems, amtStr)}"),
-            Row($"  [{dim}]Type:[/]                 {(field == 2 && !inItems ? $"[bold {p}]{Markup.Escape(string.IsNullOrEmpty(type) ? "_" : type)}[/]" : typeDisplay)}"),
-            Row($"  [{dim}]Date:[/]                 {Hl(field == 3 && !inItems, string.IsNullOrEmpty(date) ? "_" : date)}"),
-            Row(""),
+            Row($"  [{dim}]New Expense[/]"),
+            Sep(),
+            Row($"  [{dim}]Name  [/] {Hl(field == 0 && !inItems, string.IsNullOrEmpty(name) ? "" : name)}"),
+            Row($"  [{dim}]Amount[/] {Hl(field == 1 && !inItems, amtStr)}"),
+            Row($"  [{dim}]Type  [/] {(field == 2 && !inItems ? $"[bold {foc}]{Markup.Escape(string.IsNullOrEmpty(type) ? "" : type)}[/][bold {warn}]|[/]" : typeDisplay)}"),
+            Row($"  [{dim}]Date  [/] {Hl(field == 3 && !inItems, string.IsNullOrEmpty(date) ? "" : date)}"),
         };
 
-        // Items sub-panel header
+        // ── Items section ─────────────────────────────────────────────────────
         lines.Add(Sep());
-        lines.Add(Row($"  [{dim}]{"Name",-20}{"Qty",5}  {"Size",-6}{"Value",12}[/]"));
+        lines.Add(Row($"  [{dim}]{"Name",-18} {"Qty",3}  {"Size",-4} {"Value",10}[/]"));
         lines.Add(Sep());
 
         foreach (var item in items)
         {
-            var isKg     = string.Equals(item.unit, "Kg", StringComparison.OrdinalIgnoreCase);
-            var valStr   = isKg
-                ? $"{item.itemPrice.ToString("C2", brPt)}/Kg → {item.amount.ToString("C2", brPt)}"
+            var isKg   = string.Equals(item.unit, "Kg", StringComparison.OrdinalIgnoreCase);
+            var valStr = isKg
+                ? $"{item.itemPrice.ToString("C2", brPt)}/Kg={item.amount.ToString("C2", brPt)}"
                 : item.amount.ToString("C2", brPt);
-            var nameStr  = item.name.Length > 20 ? item.name[..20] : item.name.PadRight(20);
+            var nm = item.name.Length > 18 ? item.name[..18] : item.name.PadRight(18);
             lines.Add(Row(
-                $"  [{sec}]{Markup.Escape(nameStr)}[/]" +
-                $"[{dim}]{item.qty,5}  {Markup.Escape(item.unit.PadRight(6))}[/]" +
-                $"[{acc}]{Markup.Escape(valStr),12}[/]"));
+                $"  [{sec}]{Markup.Escape(nm)}[/]" +
+                $" [{dim}]{item.qty,3}  {Markup.Escape(item.unit.PadRight(4))}[/]" +
+                $" [{acc}]{Markup.Escape(valStr),10}[/]"));
         }
 
-        // Active item entry row
+        // ── Active item entry ─────────────────────────────────────────────────
         if (inItems)
         {
             var isKg = string.Equals(iUnit, "Kg", StringComparison.OrdinalIgnoreCase);
-            lines.Add(Row($"  [{dim}]Name:[/]  {Hl(itemField == 0, string.IsNullOrEmpty(iName) ? "_" : iName)}"));
-            lines.Add(Row($"  [{dim}]Qty:[/]   {Hl(itemField == 1, iQty.ToString())}"));
-            lines.Add(Row($"  [{dim}]Size:[/]  {Hl(itemField == 2, string.IsNullOrEmpty(iUnit) ? "Kg or Un" : iUnit)}  [{dim}](Kg or Un)[/]"));
-            if (!string.IsNullOrEmpty(iUnit))
+            string priceField;
+            if (string.IsNullOrEmpty(iUnit))
+                priceField = "";
+            else if (isKg)
             {
-                if (isKg)
-                {
-                    var calcAmt = iItemPrice * iQty;
-                    lines.Add(Row(
-                        $"  [{dim}]Price/Kg:[/]  {Hl(itemField == 3, iItemPrice.ToString("C2", brPt))}" +
-                        $"  [{dim}]→ Total:[/] [{acc}]{Markup.Escape(calcAmt.ToString("C2", brPt))}[/]"));
-                }
-                else
-                {
-                    lines.Add(Row($"  [{dim}]Amount:[/]   {Hl(itemField == 3, iAmount.ToString("C2", brPt))}"));
-                }
+                var calc = iItemPrice * iQty;
+                priceField = $" [{dim}]→[/] [{acc}]{Markup.Escape(calc.ToString("C2", brPt))}[/]";
             }
+            else
+                priceField = $" {Hl(itemField == 3, iAmount.ToString("C2", brPt))}";
+
+            lines.Add(Row(
+                $"  {Hl(itemField == 0, string.IsNullOrEmpty(iName) ? "" : iName)}" +
+                $" [{dim}]qty[/]{Hl(itemField == 1, iQty.ToString())}" +
+                $" [{dim}]sz[/]{Hl(itemField == 2, string.IsNullOrEmpty(iUnit) ? "" : iUnit)}" +
+                (!string.IsNullOrEmpty(iUnit) ? $" [{dim}]val[/]{(isKg ? Hl(itemField == 3, iItemPrice.ToString("C2", brPt)) : Hl(itemField == 3, iAmount.ToString("C2", brPt)))}" : "") +
+                (isKg && !string.IsNullOrEmpty(iUnit) ? $" [{acc}]={Markup.Escape((iItemPrice*iQty).ToString("C2",brPt))}[/]" : "")));
         }
         else
         {
-            lines.Add(Row($"  [{dim}](press + to add item)[/]"));
+            lines.Add(Row($"  [{dim}]+ add item[/]"));
         }
 
-        lines.Add(Sep("╰", "╯"));
-        lines.Add(Row(""));
-        lines.Add(Row($"  [{dim}]+: add item   Tab: next field   Enter: save/confirm item   Esc: cancel[/]"));
+        // ── Footer hint ───────────────────────────────────────────────────────
+        lines.Add(Sep("├", "┤"));
+        var hint = inItems
+            ? $"  [{dim}]Tab next  Enter confirm  Esc back[/]"
+            : $"  [{dim}]+item  Tab field  Enter save  Esc cancel[/]";
+        lines.Add(Row(hint));
         lines.Add($"[{brd}]╰{new string('─', inner)}╯[/]");
 
         return lines;

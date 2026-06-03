@@ -13,6 +13,7 @@ public static class Theme
     public static readonly Color Muted     = new(100, 100, 115);  // dim gray
     public static readonly Color Border    = new(55,  50,  80);   // dark purple border
     public static readonly Color Warning   = new(255, 200, 80);   // amber
+    public static readonly Color Focus     = new(180, 160, 255);  // neutral light purple (selected)
 
     // ── Styles ──────────────────────────────────────────────────────────────
     public static Style PrimaryStyle   => new(Primary);

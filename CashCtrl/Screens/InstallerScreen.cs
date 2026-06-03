@@ -76,40 +76,39 @@ public static class InstallerScreen
 
     private static bool ConfirmStep(string installDir)
     {
-        string exeDest    = Path.Combine(installDir, "cash-ctrl.exe");
-        int    menuIdx    = 0; // 0 = Install, 1 = Cancel
-        var    menuItems  = new[] { "Install", "Cancel" };
+        string exeDest = Path.Combine(installDir, "cash-ctrl.exe");
+        int    menuIdx = 0;
 
         while (true)
         {
+            var installLbl = menuIdx == 0
+                ? $"  [bold #{C(Theme.Primary)}]> Install[/]"
+                : $"  [#{C(Theme.Secondary)}]  Install[/]";
+            var cancelLbl = menuIdx == 1
+                ? $"  [bold #{C(Theme.Primary)}]> Cancel[/]"
+                : $"  [#{C(Theme.Secondary)}]  Cancel[/]";
+
             DrawHeader();
             DrawBox(new[]
             {
                 $"  [#{C(Theme.Muted)}]This will:[/]",
-                $"  [#{C(Theme.Secondary)}]1.[/] Copy [bold #{C(Theme.Primary)}]cash-ctrl.exe[/] to [#{C(Theme.Secondary)}]{Markup.Escape(exeDest)}[/]",
-                $"  [#{C(Theme.Secondary)}]2.[/] Add [#{C(Theme.Secondary)}]{Markup.Escape(installDir)}[/] to your user [bold #{C(Theme.Accent)}]PATH[/]",
+                $"  [#{C(Theme.Secondary)}]1.[/] Copy [bold #{C(Theme.Primary)}]cash-ctrl.exe[/] to:",
+                $"     [#{C(Theme.Secondary)}]{Markup.Escape(exeDest)}[/]",
+                $"  [#{C(Theme.Secondary)}]2.[/] Add to user [bold #{C(Theme.Accent)}]PATH[/]:",
+                $"     [#{C(Theme.Secondary)}]{Markup.Escape(installDir)}[/]",
                 "",
+                installLbl,
+                cancelLbl,
+                "",
+                $"  [#{C(Theme.Muted)}]\u2191\u2193 select   Enter confirm   Esc cancel[/]",
             });
-
-            // Menu
-            int w = Math.Max(Console.WindowWidth > 0 ? Console.WindowWidth : 80, 20);
-            Console.WriteLine();
-            for (int i = 0; i < menuItems.Length; i++)
-            {
-                var lbl = i == menuIdx
-                    ? $"[bold #{C(Theme.Primary)}]> {Markup.Escape(menuItems[i])}[/]"
-                    : $"[#{C(Theme.Secondary)}]  {Markup.Escape(menuItems[i])}[/]";
-                WriteCentered(lbl, w);
-            }
-            Console.WriteLine();
-            WriteCentered($"[#{C(Theme.Muted)}]↑↓: select    Enter: confirm    Esc: cancel[/]", w);
 
             var k = Console.ReadKey(true);
             if (k.Key == ConsoleKey.Escape) return false;
             if (k.Key == ConsoleKey.UpArrow   && menuIdx > 0) menuIdx--;
-            if (k.Key == ConsoleKey.DownArrow && menuIdx < menuItems.Length - 1) menuIdx++;
+            if (k.Key == ConsoleKey.DownArrow && menuIdx < 1) menuIdx++;
             if (k.Key == ConsoleKey.Enter)
-                return menuIdx == 0; // 0 = Install
+                return menuIdx == 0;
         }
     }
 
@@ -245,20 +244,31 @@ public static class InstallerScreen
 
     private static void DrawBox(IEnumerable<string> lines)
     {
-        int w   = Math.Max(Console.WindowWidth > 0 ? Console.WindowWidth : 80, 20);
-        int bw  = Math.Min(72, w - 4);
-        int mx  = (w - bw) / 2;
-        var brd = $"#{110:X2}{100:X2}{160:X2}";
-        var pad = new string(' ', mx);
-        var inner = bw - 2;
+        int w     = Math.Max(Console.WindowWidth > 0 ? Console.WindowWidth : 80, 20);
+        int bw    = Math.Min(72, w - 4);
+        int mx    = (w - bw) / 2;
+        var brd   = $"#{110:X2}{100:X2}{160:X2}";
+        var pad   = new string(' ', mx);
+        int inner = bw - 2;
 
         AnsiConsole.Markup($"{pad}[{brd}]╭{new string('─', inner)}╮[/]");
         Console.WriteLine();
 
-        foreach (var line in lines)
+        foreach (var rawLine in lines)
         {
-            var plain = System.Text.RegularExpressions.Regex.Replace(line, @"\[.*?\]", "");
-            var fill  = Math.Max(0, inner - plain.Length);
+            var plain = System.Text.RegularExpressions.Regex.Replace(rawLine, @"\[.*?\]", "");
+            string line = rawLine;
+            // Truncate plain text if it overflows the box width
+            if (plain.Length > inner)
+            {
+                int indent   = plain.Length - plain.TrimStart().Length;
+                var trimmed  = plain.TrimStart();
+                int maxText  = Math.Max(1, inner - indent - 1);
+                if (trimmed.Length > maxText) trimmed = trimmed[..maxText] + "\u2026";
+                line  = new string(' ', indent) + Markup.Escape(trimmed);
+                plain = new string(' ', indent) + trimmed;
+            }
+            var fill = Math.Max(0, inner - plain.Length);
             AnsiConsole.Markup($"{pad}[{brd}]│[/]{line}{new string(' ', fill)}[{brd}]│[/]");
             Console.WriteLine();
         }
