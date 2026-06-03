@@ -1,10 +1,10 @@
 <h1 align="center">
   <img src="images/logo.png" alt="cash-ctrl" width="200" />
   <br>
-  Resterm
+  CASH-CTRL
 </h1>
 
-> Personal finance control tool — terminal UI powered by Spectre.Console.
+> Command-line finance control software
 
 ---
 
@@ -59,6 +59,8 @@ cash-ctrl <name>      Open or create a control by name in the current directory
 cash-ctrl .           Browse controls in the current directory
 cash-ctrl --install   Run the TUI installer (add cash-ctrl to PATH)
 cash-ctrl --help      Show this help message
+cash-ctrl --version   Show the software version
+cash-ctrl --update    Install update version
 ```
 
 ### Examples
@@ -66,7 +68,7 @@ cash-ctrl --help      Show this help message
 ```powershell
 cash-ctrl              # opens main menu
 cash-ctrl June-2026    # opens or creates Junho-2026.json in the current directory
-cash-ctrl .            # browse all controls in the current directory
+cash-ctrl .            # browse in the current directory
 ```
 
 ---
