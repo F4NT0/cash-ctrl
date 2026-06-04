@@ -52,6 +52,7 @@ try
         AnsiConsole.MarkupLine($"  [{p}]cash-ctrl[/] [{s}]<name>[/]        [{m}]Open or create a control by name in the current directory[/]");
         AnsiConsole.MarkupLine($"  [{p}]cash-ctrl[/] [{s}].[/]             [{m}]Browse controls in the current directory[/]");
         AnsiConsole.MarkupLine($"  [{p}]cash-ctrl[/] [{s}]--install[/]     [{m}]Run the TUI installer (add cash-ctrl to PATH)[/]");
+        AnsiConsole.MarkupLine($"  [{p}]cash-ctrl[/] [{s}]--uninstall[/]   [{m}]Remove cash-ctrl from PATH and disk[/]");
         AnsiConsole.MarkupLine($"  [{p}]cash-ctrl[/] [{s}]--update[/]      [{m}]Download and install the latest version[/]");
         AnsiConsole.MarkupLine($"  [{p}]cash-ctrl[/] [{s}]--version[/]     [{m}]Show version information[/]");
         AnsiConsole.MarkupLine($"  [{p}]cash-ctrl[/] [{s}]--help[/]        [{m}]Show this help message[/]");
@@ -70,6 +71,11 @@ try
     {
         // ── cash-ctrl --install  →  TUI installer ───────────────────────────
         await InstallerScreen.ShowAsync();
+    }
+    else if (cliArgs[0] is "--uninstall" or "uninstall")
+    {
+        // ── cash-ctrl --uninstall  →  remove cash-ctrl from PATH and disk ───
+        await InstallerScreen.UninstallAsync();
     }
     else if (cliArgs[0] == ".")
     {

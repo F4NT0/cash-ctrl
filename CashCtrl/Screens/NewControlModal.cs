@@ -110,17 +110,18 @@ public static class NewControlModal
         }
 
         // ── Plain-text widths ─────────────────────────────────────────────────
-        // Layout: "  Name   :  <value>"  →  2 + 8 + 2 = 12 prefix chars
-        const int prefixLen  = 12; // "  Name   :  " or "  Balance:  "
-        const int pathPrefix = 8;  // "  Path: "
+        // "  Name   :  " = 12,  "  Initial Amount:  " = 20
+        const int namePrefixLen = 12;
+        const int amtPrefixLen  = 20;
+        const int pathPrefix    = 8;  // "  Path: "
 
         // Truncate name to fit (cursor █ takes 1 extra col when active)
-        int nameMax  = inner - prefixLen - (field == 0 ? 1 : 0);
+        int nameMax  = inner - namePrefixLen - (field == 0 ? 1 : 0);
         var nameFit  = name.Length > nameMax && nameMax > 0 ? name[^Math.Max(0, nameMax)..] : name;
 
         // Amount string
         var amtStr   = amount.ToString("C2", Br);
-        int amtMax   = inner - prefixLen - (field == 1 ? 1 : 0);
+        int amtMax   = inner - amtPrefixLen - (field == 1 ? 1 : 0);
         var amtFit   = amtStr.Length > amtMax && amtMax > 0 ? amtStr[^Math.Max(0, amtMax)..] : amtStr;
 
         // Path preview — truncate directory so total fits pathBudget
@@ -153,7 +154,7 @@ public static class NewControlModal
         else
         { nameValMu = $"[{sec}]{Markup.Escape(nameFit)}[/]"; nameValLen = nameFit.Length; }
 
-        var amtLabelMu = field == 1 ? $"[bold {foc}]Balance:[/]" : $"[{dim}]Balance:[/]";
+        var amtLabelMu = field == 1 ? $"[bold {foc}]Initial Amount:[/]" : $"[{dim}]Initial Amount:[/]";
         string amtValMu; int amtValLen;
         if (field == 1)
         { amtValMu = $"[bold {acc}]{Markup.Escape(amtFit)}[/][bold {foc}]█[/]"; amtValLen = amtFit.Length + 1; }
@@ -178,8 +179,8 @@ public static class NewControlModal
             $"[{brd}]╭{new string('─', inner)}╮[/]",
             Row($"  [bold white]New Control[/]",          "  New Control".Length),
             Row("",                                        0),
-            Row($"  {nameLabelMu}  {nameValMu}",          prefixLen + nameValLen),
-            Row($"  {amtLabelMu}  {amtValMu}",            prefixLen + amtValLen),
+            Row($"  {nameLabelMu}  {nameValMu}",          namePrefixLen + nameValLen),
+            Row($"  {amtLabelMu}  {amtValMu}",            amtPrefixLen  + amtValLen),
             Row("",                                        0),
             Row($"  [{dim}]Path: [/]{pathMu}",            pathPlainLen),
             Row("",                                        0),

@@ -32,10 +32,12 @@ public static class MainScreen
         int listScroll     = 0;  // top visible row index
         bool isDeleting    = false;
         var  deleteKeys    = new HashSet<string>();
+        bool isControlsDeleting = false; // D key in Controls panel
         int calMonthIdx    = -1; // -1 = auto (most recent month)
         // Filter state: -1 = none, 0=Date, 1=Name, 2=Type, 3=Origin
-        int     filterCol  = -1;
-        string  filterText = string.Empty;
+        int     filterCol   = -1;
+        string  filterText  = string.Empty; // applied filter (after Enter)
+        string  filterInput = string.Empty; // live typing (not yet applied)
         bool    isFiltering = false;
 
         while (true)
@@ -74,51 +76,85 @@ public static class MainScreen
 
             if (listIdx >= entries.Count) listIdx = Math.Max(0, entries.Count - 1);
 
-            DrawAll(control, siblingControls, controlsIdx, focus, entries, listIdx, listScroll, isDeleting, deleteKeys, calMonthIdx, filterCol, filterText, isFiltering);
+            DrawAll(control, siblingControls, controlsIdx, focus, entries, listIdx, listScroll, isDeleting, deleteKeys, calMonthIdx, filterCol, filterText, isFiltering, isControlsDeleting, filterInput);
 
             var k = await Task.Run(() => Console.ReadKey(true));
 
             if (k.Key == ConsoleKey.Escape || (k.KeyChar is 'q' or 'Q' && !isFiltering))
             {
+                if (isControlsDeleting) { isControlsDeleting = false; continue; }
                 if (isDeleting) { isDeleting = false; deleteKeys.Clear(); continue; }
-                if (focus == MainFocus.List) { focus = MainFocus.None; continue; }
+                if (focus != MainFocus.None) { focus = MainFocus.None; continue; }
                 AnsiConsole.Clear(); return;
             }
 
-            // Filter mode: F key cycles through columns
+            // Filter mode: F key enters filter mode
             if (k.KeyChar is 'f' or 'F' && !isDeleting && !isFiltering && focus == MainFocus.List)
             {
-                isFiltering = true;
-                filterCol   = 0;
-                filterText  = string.Empty;
+                isFiltering  = true;
+                filterCol    = 0;
+                filterText   = string.Empty;
+                filterInput  = string.Empty;
                 continue;
             }
             if (isFiltering)
             {
                 if (k.Key == ConsoleKey.Escape)
                 {
-                    isFiltering = false;
-                    filterCol   = -1;
-                    filterText  = string.Empty;
+                    isFiltering  = false;
+                    filterCol    = -1;
+                    filterText   = string.Empty;
+                    filterInput  = string.Empty;
                 }
                 else if (k.Key == ConsoleKey.Tab)
                 {
-                    filterCol  = (filterCol + 1) % 4;
-                    filterText = string.Empty;
+                    filterCol   = (filterCol + 1) % 4;
+                    filterInput = string.Empty; // clear pending input, keep applied filter until next Enter
                 }
                 else if (k.Key == ConsoleKey.Enter)
                 {
+                    // Apply pending input as the active filter
+                    filterText  = filterInput;
                     isFiltering = false;
+                    listIdx = 0; listScroll = 0;
+
+                    // Check if the applied filter yields any results
+                    if (!string.IsNullOrEmpty(filterText))
+                    {
+                        var period2 = control.Periods.Values.FirstOrDefault();
+                        var allE2 = period2?.Entries
+                            .Select(kv => (key: kv.Key, entry: kv.Value))
+                            .ToList() ?? new();
+                        bool hasMatch = allE2.Any(x =>
+                        {
+                            var e = x.entry;
+                            var haystack = (filterCol switch
+                            {
+                                0 => e.Date ?? "",
+                                1 => (!string.IsNullOrWhiteSpace(e.Description) ? e.Description : x.key),
+                                2 => e.Type ?? "",
+                                3 => e.Origin ?? "",
+                                _ => ""
+                            }).Trim();
+                            return haystack.Contains(filterText, StringComparison.OrdinalIgnoreCase);
+                        });
+                        if (!hasMatch)
+                        {
+                            await ShowFilterNoResultsAsync(filterText);
+                            filterText  = string.Empty;
+                            filterCol   = -1;
+                        }
+                    }
+                    continue;
                 }
                 else if (k.Key == ConsoleKey.Backspace)
                 {
-                    if (filterText.Length > 0) filterText = filterText[..^1];
+                    if (filterInput.Length > 0) filterInput = filterInput[..^1];
                 }
                 else if (k.KeyChar >= ' ')
                 {
-                    filterText += k.KeyChar;
+                    filterInput += k.KeyChar;
                 }
-                listIdx = 0; listScroll = 0;
                 continue;
             }
 
@@ -135,8 +171,11 @@ public static class MainScreen
             }
 
             // Focus the Control list
-            if (k.KeyChar is 'c' or 'C' && !isDeleting)
+            if (k.KeyChar is 'c' or 'C' && !isDeleting && !isControlsDeleting)
+            {
                 focus = focus == MainFocus.Controls ? MainFocus.None : MainFocus.Controls;
+                isControlsDeleting = false;
+            }
 
             // Focus the entry list
             if (k.KeyChar is 'l' or 'L' && !isDeleting)
@@ -145,38 +184,47 @@ public static class MainScreen
                 listIdx = 0; listScroll = 0;
             }
 
-            // Edit initial total balance (B)
+            // B — toggle Total focus; when already focused open balance modal
             if (k.KeyChar is 'b' or 'B' && !isDeleting)
             {
-                DrawAll(control, siblingControls, controlsIdx, focus, entries, listIdx, listScroll, isDeleting, deleteKeys, calMonthIdx, filterCol, filterText, isFiltering);
-                var p2 = control.Periods.Values.FirstOrDefault();
-                var currentTv = p2?.TotalValue ?? 0m;
-                if (await EditTotalModal.ShowAsync(control, currentTv))
+                if (focus == MainFocus.Total)
                 {
-                    var r = await ControlService.LoadControlAsync(control.FilePath);
-                    if (r is not null) control = r;
+                    var p2 = control.Periods.Values.FirstOrDefault();
+                    var currentTv = p2?.TotalValue ?? control.TotalAmount;
+                    if (await EditTotalModal.ShowAsync(control, currentTv))
+                    {
+                        var r = await ControlService.LoadControlAsync(control.FilePath);
+                        if (r is not null) control = r;
+                    }
+                }
+                else
+                {
+                    focus = MainFocus.Total;
                 }
             }
 
-            // Focus the Total money to create new income (I)
+            // I — toggle Total focus; when already focused open income modal
             if (k.KeyChar is 'i' or 'I' && !isDeleting)
             {
-                focus = MainFocus.Total;
-                DrawAll(control, siblingControls, controlsIdx, focus, entries, listIdx, listScroll, isDeleting, deleteKeys, calMonthIdx, filterCol, filterText, isFiltering);
-                var p2 = control.Periods.Values.FirstOrDefault();
-                var currentTotal = (p2?.TotalValue ?? 0m) + (p2?.TotalIncome ?? 0m);
-                if (await NewIncomeModal.ShowAsync(control, currentTotal))
+                if (focus == MainFocus.Total)
                 {
-                    var r = await ControlService.LoadControlAsync(control.FilePath);
-                    if (r is not null) control = r;
+                    var p2 = control.Periods.Values.FirstOrDefault();
+                    var currentTotal = (p2?.TotalValue ?? control.TotalAmount) + (p2?.TotalIncome ?? 0m);
+                    if (await NewIncomeModal.ShowAsync(control, currentTotal))
+                    {
+                        var r = await ControlService.LoadControlAsync(control.FilePath);
+                        if (r is not null) control = r;
+                    }
+                }
+                else
+                {
+                    focus = MainFocus.Total;
                 }
             }
 
-            // Focus the Total expense to create new expense
+            // E — transient modal, no persistent focus
             if (k.KeyChar is 'e' or 'E' && !isDeleting)
             {
-                focus = MainFocus.Expenses;
-                DrawAll(control, siblingControls, controlsIdx, focus, entries, listIdx, listScroll, isDeleting, deleteKeys, calMonthIdx, filterCol, filterText, isFiltering);
                 if (await NewExpenseModal.ShowAsync(control))
                 {
                     var r = await ControlService.LoadControlAsync(control.FilePath);
@@ -188,20 +236,60 @@ public static class MainScreen
             {
                 if (k.Key == ConsoleKey.UpArrow && controlsIdx > 0) controlsIdx--;
                 if (k.Key == ConsoleKey.DownArrow && controlsIdx < siblingControls.Count - 1) controlsIdx++;
+
                 if (k.Key == ConsoleKey.Enter && siblingControls.Count > 0)
                 {
-                    var nc = await ControlService.LoadControlAsync(siblingControls[controlsIdx]);
-                    if (nc is not null)
+                    if (!isControlsDeleting)
                     {
-                        control     = nc;
-                        controlsDir = Path.GetDirectoryName(control.FilePath) ?? controlsDir;
+                        var nc = await ControlService.LoadControlAsync(siblingControls[controlsIdx]);
+                        if (nc is not null)
+                        {
+                            control     = nc;
+                            controlsDir = Path.GetDirectoryName(control.FilePath) ?? controlsDir;
+                        }
                     }
                 }
 
-                // N: create new control in the same directory
-                if (k.KeyChar is 'n' or 'N')
+                // D: enter delete mode for controls
+                if (k.KeyChar is 'd' or 'D' && !isControlsDeleting && siblingControls.Count > 0)
                 {
-                    DrawAll(control, siblingControls, controlsIdx, focus, entries, listIdx, listScroll, isDeleting, deleteKeys, calMonthIdx, filterCol, filterText, isFiltering);
+                    isControlsDeleting = true;
+                    continue;
+                }
+
+                // In controls delete mode: Enter = confirm delete
+                if (isControlsDeleting && k.Key == ConsoleKey.Enter && siblingControls.Count > 0)
+                {
+                    var targetPath    = siblingControls[controlsIdx];
+                    var targetName    = GetDisplayName(targetPath);
+                    var targetControl = await ControlService.LoadControlAsync(targetPath) ?? control;
+                    bool confirmed    = await ShowDeleteControlConfirmAsync(targetName, targetPath, targetControl);
+                    if (confirmed)
+                    {
+                        await ControlService.DeleteControlAsync(targetPath);
+                        siblingControls = ControlService.FindControlsInDirectory(controlsDir);
+                        if (siblingControls.Count == 0)
+                        {
+                            AnsiConsole.Clear();
+                            await WelcomeScreen.ShowAsync();
+                            return;
+                        }
+                        // If deleted the active control, switch to the first available
+                        if (string.Equals(targetPath, control.FilePath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            var nc = await ControlService.LoadControlAsync(siblingControls[0]);
+                            if (nc is not null) control = nc;
+                        }
+                        controlsIdx = Math.Clamp(controlsIdx, 0, siblingControls.Count - 1);
+                    }
+                    isControlsDeleting = false;
+                    continue;
+                }
+
+                // N: create new control in the same directory
+                if (k.KeyChar is 'n' or 'N' && !isControlsDeleting)
+                {
+                    DrawAll(control, siblingControls, controlsIdx, focus, entries, listIdx, listScroll, isDeleting, deleteKeys, calMonthIdx, filterCol, filterText, isFiltering, isControlsDeleting, filterInput);
                     var newPath = await NewControlModal.ShowAsync(controlsDir);
                     if (newPath is not null)
                     {
@@ -302,19 +390,21 @@ public static class MainScreen
         int calMonthIdx = -1,
         int filterCol = -1,
         string filterText = "",
-        bool isFiltering = false)
+        bool isFiltering = false,
+        bool isControlsDeleting = false,
+        string filterInput = "")
     {
         Console.CursorVisible = false;
         // Move to top-left instead of clearing to avoid flicker
         Console.SetCursorPosition(0, 0);
 
         var period = control.Periods.Values.FirstOrDefault();
-        var totalMoney = (period?.TotalValue ?? 0m) + (period?.TotalIncome ?? 0m);
+        var totalMoney = (period?.TotalValue ?? control.TotalAmount) + (period?.TotalIncome ?? 0m);
         var totalExp   = period?.TotalExpenses ?? 0m;
         var difference = totalMoney - totalExp;
 
         // ── Build top panels ──────────────────────────────────────────────────
-        var controlsPanel = MakeControlsPanel(siblings, controlsIdx, control.FilePath, focus == MainFocus.Controls);
+        var controlsPanel = MakeControlsPanel(siblings, controlsIdx, control.FilePath, focus == MainFocus.Controls, isControlsDeleting);
         var chartPanel    = MakeChartPanel(period, focus == MainFocus.Chart);
         var calPanel      = MakeCalendarPanel(period, focus == MainFocus.Calendar, calMonthIdx);
 
@@ -355,7 +445,7 @@ public static class MainScreen
         int listPanelH  = Math.Max(4, listHeight);
         int rawRows     = Math.Max(2, listPanelH - 4); // subtract borders + header
         int visibleRows = Math.Max(1, rawRows / 2);    // each row = data + separator
-        var listPanel   = MakeEntryListPanel(keyedEntries, focus == MainFocus.List, listIdx, listScroll, visibleRows, isDeleting, deleteKeys, filterCol, filterText, isFiltering);
+        var listPanel   = MakeEntryListPanel(keyedEntries, focus == MainFocus.List, listIdx, listScroll, visibleRows, isDeleting, deleteKeys, filterCol, filterText, isFiltering, filterInput);
 
         var layout = new Layout("root")
         {
@@ -364,9 +454,9 @@ public static class MainScreen
         layout.SplitRows(
             new Layout("top") { Size = topHeight }
                 .SplitColumns(
-                    new Layout("controls").Ratio(1),
-                    new Layout("chart").Ratio(2),
-                    new Layout("calendar").Ratio(1)
+                    new Layout("controls").Ratio(2),
+                    new Layout("chart").Ratio(3),
+                    new Layout("calendar").Ratio(2)
                 ),
             new Layout("mid") { Size = midHeight }
                 .SplitColumns(
@@ -396,39 +486,39 @@ public static class MainScreen
                 $" [bold yellow]\u26a0 New version available ({CashCtrl.Services.VersionService.LatestVersion}), run cash-ctrl --update to update[/]");
         }
 
-        // -> AVAILABLE COMMANDS
-        var fk = Hex(Theme.Focus);
-        int termW = Math.Max(20, Console.WindowWidth);
-        string footer;
-        if (termW < 120)
+        // -> DYNAMIC FOOTER per focus
+        var fk  = Hex(Theme.Focus);
+        var dim = Hex(Theme.Muted);
+        string footer = focus switch
         {
-            // Compact footer for narrow terminals
-            footer = $" [bold {fk}](C)[/][{Hex(Theme.Muted)}] Controls [/]" +
-                     $"[{Hex(Theme.Muted)}]|[/] [bold {fk}](B)[/][{Hex(Theme.Muted)}] balance [/]" +
-                     $"[{Hex(Theme.Muted)}]|[/] [bold {fk}](I)[/][{Hex(Theme.Muted)}] income [/]" +
-                     $"[{Hex(Theme.Muted)}]|[/] [bold {fk}](E)[/][{Hex(Theme.Muted)}] expense [/]" +
-                     $"[{Hex(Theme.Muted)}]|[/] [bold {fk}](L)[/][{Hex(Theme.Muted)}] list [/]" +
-                     $"[{Hex(Theme.Muted)}]|[/] [bold {fk}](S)[/][{Hex(Theme.Muted)}] months [/]" +
-                     $"[{Hex(Theme.Muted)}]|[/] [bold {fk}](Esc)[/][{Hex(Theme.Muted)}] quit[/]";
-        }
-        else
-        {
-            footer = $" [bold {fk}](C)[/][{Hex(Theme.Muted)}] controls   [/]" +
-                     $"[bold {fk}](B)[/][{Hex(Theme.Muted)}] balance   [/]" +
-                     $"[bold {fk}](I)[/][{Hex(Theme.Muted)}] new income   [/]" +
-                     $"[bold {fk}](E)[/][{Hex(Theme.Muted)}] new expense   [/]" +
-                     $"[bold {fk}](L)[/][{Hex(Theme.Muted)}] list   [/]" +
-                     $"[bold {fk}](S)[/][{Hex(Theme.Muted)}] cal month   [/]" +
-                     $"[bold {fk}]Esc[/][{Hex(Theme.Muted)}] quit[/]";
-        }
-        AnsiConsole.Markup(footer);
+            MainFocus.Controls when isControlsDeleting =>
+                $" [{dim}]Controls: [/][bold {fk}]↑↓[/][{dim}] select   [/][bold {fk}]Enter[/][{dim}] confirm delete   [/][bold {fk}]Esc[/][{dim}] cancel[/]",
+            MainFocus.Controls =>
+                $" [{dim}]Controls: [/][bold {fk}]↑↓[/][{dim}] select   [/][bold {fk}]Enter[/][{dim}] open   [/][bold {fk}]D[/][{dim}] delete   [/][bold {fk}]N[/][{dim}] new   [/][bold {fk}]C[/][{dim}] exit panel   [/][bold {fk}]Esc[/][{dim}] quit[/]",
+            MainFocus.List when isFiltering =>
+                $" [{dim}]Filter: [/][bold {fk}]Tab[/][{dim}] next col   [/][bold {fk}]Enter[/][{dim}] confirm   [/][bold {fk}]Esc[/][{dim}] clear[/]",
+            MainFocus.List when isDeleting =>
+                $" [{dim}]Delete: [/][bold {fk}]↑↓[/][{dim}] select   [/][bold {fk}]Space[/][{dim}] mark   [/][bold {fk}]Enter[/][{dim}] delete   [/][bold {fk}]Esc[/][{dim}] cancel[/]",
+            MainFocus.List =>
+                $" [{dim}]List: [/][bold {fk}]↑↓[/][{dim}] scroll   [/][bold {fk}]Enter[/][{dim}] detail   [/][bold {fk}]D[/][{dim}] delete   [/][bold {fk}]U[/][{dim}] edit   [/][bold {fk}]F[/][{dim}] filter   [/][bold {fk}]L[/][{dim}] exit panel   [/][bold {fk}]Esc[/][{dim}] quit[/]",
+            MainFocus.Total =>
+                $" [{dim}]Total: [/][bold {fk}]I[/][{dim}] add income   [/][bold {fk}]B[/][{dim}] edit balance   [/][bold {fk}]Esc[/][{dim}] exit panel[/]",
+            _ =>
+                $" [{dim}]Panels: [/][bold {fk}]C[/][{dim}] controls   [/][bold {fk}]B[/][{dim}] balance   [/][bold {fk}]I[/][{dim}] income   [/][bold {fk}]E[/][{dim}] expense   [/][bold {fk}]L[/][{dim}] list   [/][bold {fk}]S[/][{dim}] cal month   [/][bold {fk}]Esc[/][{dim}] quit[/]"
+        };
+        // Pad to terminal width to erase any stale characters from a longer previous footer
+        int termW2 = Math.Max(1, Console.WindowWidth);
+        var footerPlain = System.Text.RegularExpressions.Regex.Replace(footer, @"\[.*?\]", "");
+        int pad = Math.Max(0, termW2 - footerPlain.Length - 1);
+        AnsiConsole.Markup(footer + new string(' ', pad));
     }
 
     // ── Panel builders ────────────────────────────────────────────────────────
 
     private static Panel MakeControlsPanel(
-        List<string> siblings, int selectedIdx, string currentPath, bool focused)
+        List<string> siblings, int selectedIdx, string currentPath, bool focused, bool isControlsDeleting = false)
     {
+        var red  = "#FF6B6B";
         var rows = new List<string>();
         foreach (var (fp, i) in siblings.Select((f, i) => (f, i)))
         {
@@ -436,7 +526,9 @@ public static class MainScreen
             var isCurrent = string.Equals(fp, currentPath, StringComparison.OrdinalIgnoreCase);
             var isSel     = i == selectedIdx;
             string line;
-            if (isCurrent && isSel)
+            if (isControlsDeleting && isSel)
+                line = $"[bold {red}]> {Markup.Escape(name)}[/]";
+            else if (isCurrent && isSel)
                 line = $"[bold {Hex(Theme.Warning)}]> {Markup.Escape(name)}[/]";
             else if (isCurrent)
                 line = $"[{Hex(Theme.Primary)}]  {Markup.Escape(name)}[/]";
@@ -451,12 +543,8 @@ public static class MainScreen
             ? (IRenderable)new Markup(string.Join("\n", rows))
             : new Markup($"[{Hex(Theme.Muted)}](empty)[/]");
 
-        var borderColor = focused ? Theme.Focus : Theme.Border;
-        var titleColor  = focused ? Theme.Focus : Theme.Muted;
-        var titleText   = $"[{Hex(titleColor)}]Controls[/]";
-        var hintMarkup  = focused
-            ? $"  [{Hex(Theme.Muted)}]↑↓: select  Enter: open  N: new[/]"
-            : "";
+        var borderColor = isControlsDeleting ? Color.Red : (focused ? Theme.Focus : Theme.Border);
+        var titleColor  = isControlsDeleting ? Color.Red : (focused ? Theme.Focus : Theme.Muted);
 
         var panel = new Panel(content)
         {
@@ -465,7 +553,7 @@ public static class MainScreen
             Padding     = new Padding(1, 0),
             Expand      = true,
         };
-        panel.Header = new PanelHeader($"{titleText}{hintMarkup}", Justify.Left);
+        panel.Header = new PanelHeader($"[{Hex(titleColor)}]Controls[/]", Justify.Left);
         return panel;
     }
 
@@ -671,7 +759,8 @@ public static class MainScreen
         HashSet<string>? deleteKeys = null,
         int filterCol   = -1,
         string filterText = "",
-        bool isFiltering = false)
+        bool isFiltering = false,
+        string filterInput = "")
     {
         var dim  = Hex(Theme.Muted);
         var sec  = Hex(Theme.Secondary);
@@ -696,7 +785,7 @@ public static class MainScreen
             string ColHdr(int col, string label)
             {
                 if (isFiltering && filterCol == col)
-                    return $"[bold {Hex(Theme.Focus)}]{label}[/] [bold {Hex(Theme.Warning)}]▶ {Markup.Escape(filterText)}|[/]";
+                    return $"[bold {Hex(Theme.Focus)}]{label}[/] [bold {Hex(Theme.Warning)}]▶ {Markup.Escape(filterInput)}|[/]";
                 if (!isFiltering && filterCol == col && !string.IsNullOrEmpty(filterText))
                     return $"[bold {Hex(Theme.Focus)}]{label}[/] [{Hex(Theme.Muted)}]({Markup.Escape(filterText)})[/]";
                 return $"[{dim}]{label}[/]";
@@ -764,15 +853,6 @@ public static class MainScreen
         var borderColor = focused || isDeleting ? Theme.Focus : Theme.Border;
         var titleColor  = focused || isDeleting ? Theme.Focus : Theme.Muted;
         var titleText   = $"[{Hex(titleColor)}]Expense / Income list[/]";
-        string hintMarkup;
-        if (isFiltering)
-            hintMarkup = $"  [{dim}]Tab: next col  Enter: confirm  Esc: clear[/]";
-        else if (isDeleting)
-            hintMarkup = $"  [{dim}]Space: mark  Enter: delete  Esc: cancel[/]";
-        else if (focused)
-            hintMarkup = $"  [{dim}]↑↓: scroll  Enter: detail  D: delete  U: edit  F: filter  Esc: exit[/]";
-        else
-            hintMarkup = "";
 
         var panel = new Panel(content)
         {
@@ -781,7 +861,7 @@ public static class MainScreen
             Padding     = new Padding(1, 0),
             Expand      = true,
         };
-        panel.Header = new PanelHeader($"{titleText}{hintMarkup}", Justify.Left);
+        panel.Header = new PanelHeader(titleText, Justify.Left);
         return panel;
     }
 
@@ -808,6 +888,126 @@ public static class MainScreen
             headerJustify);
 
         return panel;
+    }
+
+    // ── Filter no-results modal ───────────────────────────────────────────────
+
+    private static async Task ShowFilterNoResultsAsync(string term)
+    {
+        int w  = Math.Max(Console.WindowWidth  > 0 ? Console.WindowWidth  : 80, 40);
+        int h  = Math.Max(Console.WindowHeight > 0 ? Console.WindowHeight : 24, 8);
+        int mw = Math.Min(64, w - 4);
+        int mx = (w - mw) / 2;
+        int inner = mw - 2;
+        var brd = "#6E64A0";
+        var dim = Hex(Theme.Muted);
+        var red = "#FF6B6B";
+
+        string Row(string content)
+        {
+            var plain = System.Text.RegularExpressions.Regex.Replace(content, @"\[.*?\]", "");
+            var pad   = Math.Max(0, inner - plain.Length);
+            return $"[{brd}]│[/]{content}{new string(' ', pad)}[{brd}]│[/]";
+        }
+
+        var termDisp = term.Length > inner - 20 ? term[..(inner - 20)] : term;
+        var msg      = $"No results for \"{termDisp}\" into the list";
+        var msgPad   = Math.Max(0, (inner - msg.Length) / 2);
+        var hint     = "Press any key to continue...";
+        var hintPad  = 2;
+
+        var lines = new List<string>
+        {
+            $"[{brd}]╭{new string('─', inner)}╮[/]",
+            Row(""),
+            Row($"{new string(' ', msgPad)}[bold {red}]{Markup.Escape(msg)}[/]"),
+            Row(""),
+            Row($"{new string(' ', hintPad)}[{dim}]{Markup.Escape(hint)}[/]"),
+            Row(""),
+            $"[{brd}]╰{new string('─', inner)}╯[/]",
+        };
+
+        int mh = lines.Count;
+        int my = Math.Max(0, (h - mh) / 2);
+
+        // Overlay on top of the existing screen — no Clear
+        for (int i = 0; i < lines.Count; i++)
+        {
+            try { Console.SetCursorPosition(mx, my + i); } catch { }
+            AnsiConsole.Markup(lines[i]);
+        }
+
+        await Task.Run(() => Console.ReadKey(true));
+    }
+
+    // ── Delete-control confirmation modal ────────────────────────────────────
+
+    private static async Task<bool> ShowDeleteControlConfirmAsync(
+        string controlName, string filePath, ControlFile current)
+    {
+        var period = current.Periods.Values.FirstOrDefault();
+        var total  = period?.TotalValue ?? current.TotalAmount;
+        var brPt   = new System.Globalization.CultureInfo("pt-BR");
+
+        int w  = Math.Max(Console.WindowWidth  > 0 ? Console.WindowWidth  : 80, 50);
+        int h  = Math.Max(Console.WindowHeight > 0 ? Console.WindowHeight : 24, 12);
+        int mw = Math.Min(72, w - 4);
+        int mx = (w - mw) / 2;
+        int mh = 11;
+        int my = Math.Max(0, (h - mh) / 2);
+
+        var brd  = "#6E64A0";
+        var fk   = Hex(Theme.Focus);
+        var dim  = Hex(Theme.Muted);
+        var sec  = Hex(Theme.Secondary);
+        var acc  = Hex(Theme.Accent);
+        var red  = "#FF6B6B";
+        var inner = mw - 2;
+
+        string Row(string content)
+        {
+            var plain = System.Text.RegularExpressions.Regex.Replace(content, @"\[.*?\]", "");
+            var pad   = Math.Max(0, inner - plain.Length);
+            return $"[{brd}]│[/]{content}{new string(' ', pad)}[{brd}]│[/]";
+        }
+        string Sep(string l = "├", string r = "┤") =>
+            $"[{brd}]{l}{new string('─', inner)}{r}[/]";
+
+        // Truncate file path from left if too long
+        var displayPath = filePath;
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (displayPath.StartsWith(home, StringComparison.OrdinalIgnoreCase))
+            displayPath = "~" + displayPath[home.Length..];
+        int pathBudget = inner - 8; // "  File : " prefix
+        if (displayPath.Length > pathBudget && pathBudget > 3)
+            displayPath = "…" + displayPath[^(pathBudget - 1)..];
+
+        var lines = new List<string>
+        {
+            $"[{brd}]╭{new string('─', inner)}╮[/]",
+            Row($"  [{dim}]{Markup.Escape(controlName)}[/]"),
+            Sep(),
+            Row($"  [{dim}]Name : [/][bold {sec}]{Markup.Escape(controlName)}[/]"),
+            Row($"  [{dim}]Value: [/][bold {acc}]{Markup.Escape(total.ToString("C2", brPt))}[/]"),
+            Row($"  [{dim}]File : [/][{sec}]{Markup.Escape(displayPath)}[/]"),
+            Sep(),
+            Row($"  [bold {red}]Delete \"{Markup.Escape(controlName)}\"? This cannot be undone.[/]"),
+            Sep(),
+            Row($"  [bold {fk}]Enter[/] [{dim}]confirm delete   [/]  [bold {fk}]any other key[/] [{dim}]cancel[/]"),
+            $"[{brd}]╰{new string('─', inner)}╯[/]",
+        };
+
+        AnsiConsole.Clear();
+        for (int i = 0; i < mh && i < lines.Count; i++)
+        {
+            try { Console.SetCursorPosition(mx, my + i); } catch { }
+            AnsiConsole.Markup(lines[i]);
+            var plain = System.Text.RegularExpressions.Regex.Replace(lines[i], @"\[.*?\]", "");
+            Console.Write(new string(' ', Math.Max(0, mw - plain.Length)));
+        }
+
+        var key = await Task.Run(() => Console.ReadKey(true));
+        return key.Key == ConsoleKey.Enter;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

@@ -13,14 +13,10 @@ public static class ControlService
 
     public static async Task CreateControlAsync(string filePath, string controlName, decimal totalValue)
     {
-        var periodKey = GetCurrentPeriodName();
-
         var data = new Dictionary<string, object>
         {
-            [periodKey] = new Dictionary<string, object>
-            {
-                ["total-value"] = totalValue
-            }
+            ["name"]         = controlName,
+            ["total-amount"] = totalValue
         };
 
         var json = JsonSerializer.Serialize(data, JsonOptions.Default);
@@ -34,23 +30,51 @@ public static class ControlService
         if (!File.Exists(filePath)) return null;
 
         var json = await File.ReadAllTextAsync(filePath);
-        var raw = JsonSerializer.Deserialize<Dictionary<string, ControlPeriod>>(json, JsonOptions.Default);
 
-        if (raw is null) return null;
+        // Parse via JsonElement so we can skip scalar top-level keys
+        // (new format has "name" and "total-amount" alongside period objects)
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
 
-        // Prefer the human-readable name stored in favorites (may contain spaces)
-        // over the file slug which uses hyphens.
+        string? embeddedName   = null;
+        decimal embeddedAmount = 0m;
+        var periods = new Dictionary<string, ControlPeriod>();
+
+        foreach (var prop in root.EnumerateObject())
+        {
+            if (prop.Value.ValueKind == JsonValueKind.Object)
+            {
+                try
+                {
+                    var period = prop.Value.Deserialize<ControlPeriod>(JsonOptions.Default);
+                    if (period is not null)
+                        periods[prop.Name] = period;
+                }
+                catch { }
+            }
+            else if (prop.Name == "name" && prop.Value.ValueKind == JsonValueKind.String)
+            {
+                embeddedName = prop.Value.GetString();
+            }
+            else if (prop.Name == "total-amount" && prop.Value.ValueKind == JsonValueKind.Number)
+            {
+                embeddedAmount = prop.Value.GetDecimal();
+            }
+        }
+
+        // Prefer embedded name, then favorites, then file slug
         var favName = GetFavorites()
             .FirstOrDefault(f => string.Equals(f.FilePath, filePath, StringComparison.OrdinalIgnoreCase))
             ?.Name;
 
-        var name = favName ?? Path.GetFileNameWithoutExtension(filePath);
+        var name = favName ?? embeddedName ?? Path.GetFileNameWithoutExtension(filePath);
 
         var control = new ControlFile
         {
-            Name = name,
-            FilePath = filePath,
-            Periods = raw
+            Name        = name,
+            FilePath    = filePath,
+            TotalAmount = embeddedAmount,
+            Periods     = periods
         };
 
         return control;
@@ -116,6 +140,18 @@ public static class ControlService
         await SaveControlAsync(control, periodDict, periodKey);
     }
 
+    public static async Task DeleteControlAsync(string filePath)
+    {
+        if (File.Exists(filePath))
+            File.Delete(filePath);
+
+        // Remove from favorites
+        var favorites = GetFavorites();
+        favorites.RemoveAll(f => string.Equals(f.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+        var json = JsonSerializer.Serialize(favorites, JsonOptions.Default);
+        await File.WriteAllTextAsync(FavoritesPath, json);
+    }
+
     public static async Task DeleteEntriesAsync(ControlFile control, string periodKey, IEnumerable<string> entryKeys)
     {
         var period = control.Periods.GetValueOrDefault(periodKey);
@@ -164,6 +200,9 @@ public static class ControlService
 
     public static async Task SaveTotalValueAsync(ControlFile control, string periodKey, decimal newTotalValue)
     {
+        // New format: persist total-amount at top level
+        control.TotalAmount = newTotalValue;
+
         var period = control.Periods.GetValueOrDefault(periodKey)
                      ?? new ControlPeriod { TotalValue = 0 };
 
@@ -192,17 +231,26 @@ public static class ControlService
         Dictionary<string, object> updatedPeriodDict,
         string updatedPeriodKey)
     {
-        // Rebuild entire file: all periods, replace the updated one
-        var allPeriods = new Dictionary<string, object>();
+        // Always start with name + total-amount at top level
+        var fileDict = new Dictionary<string, object>
+        {
+            ["name"]         = control.Name,
+            ["total-amount"] = control.TotalAmount
+        };
+
+        // Append all periods (replace the updated one)
         foreach (var (key, period) in control.Periods)
         {
-            if (key == updatedPeriodKey)
-                allPeriods[key] = updatedPeriodDict;
-            else
-                allPeriods[key] = BuildPeriodDict(period);
+            fileDict[key] = key == updatedPeriodKey
+                ? updatedPeriodDict
+                : BuildPeriodDict(period);
         }
 
-        var json = JsonSerializer.Serialize(allPeriods, JsonOptions.Default);
+        // Also include the updated period if it wasn't in control.Periods yet
+        if (!control.Periods.ContainsKey(updatedPeriodKey))
+            fileDict[updatedPeriodKey] = updatedPeriodDict;
+
+        var json = JsonSerializer.Serialize(fileDict, JsonOptions.Default);
         await File.WriteAllTextAsync(control.FilePath, json);
     }
 
@@ -243,6 +291,11 @@ public static class ControlService
 
             if (root.ValueKind != JsonValueKind.Object) return false;
 
+            // New format: top-level "total-amount" key
+            if (root.TryGetProperty("total-amount", out _))
+                return true;
+
+            // Legacy format: period object with "total-value" key
             foreach (var period in root.EnumerateObject())
             {
                 if (period.Value.ValueKind == JsonValueKind.Object &&
@@ -258,7 +311,7 @@ public static class ControlService
         }
     }
 
-    private static string GetCurrentPeriodName()
+    public static string GetCurrentPeriodKey()
     {
         var now = DateTime.Now;
         var months = new[]
@@ -268,6 +321,8 @@ public static class ControlService
         };
         return $"{months[now.Month - 1]} {now.Year}";
     }
+
+    private static string GetCurrentPeriodName() => GetCurrentPeriodKey();
 }
 
 public class FavoriteEntry

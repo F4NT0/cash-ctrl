@@ -43,6 +43,129 @@ public static class InstallerScreen
         AnsiConsole.Clear();
     }
 
+    // ── Uninstall entry point ────────────────────────────────────────────────
+
+    public static async Task UninstallAsync()
+    {
+        Console.OutputEncoding = System.Text.Encoding.UTF8;
+        AnsiConsole.Clear();
+
+        var defaultInstallDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "CashCtrl");
+        var exePath = Path.Combine(defaultInstallDir, "cash-ctrl.exe");
+
+        // Resolve actual installed exe from PATH if not at default location
+        if (!File.Exists(exePath))
+        {
+            var pathVar = Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User) ?? "";
+            foreach (var dir in pathVar.Split(';', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var candidate = Path.Combine(dir.Trim(), "cash-ctrl.exe");
+                if (File.Exists(candidate)) { exePath = candidate; break; }
+            }
+        }
+
+        var installDir = Path.GetDirectoryName(exePath) ?? defaultInstallDir;
+
+        DrawHeader(
+            subtitle: "Uninstaller",
+            desc:     "Removes cash-ctrl from your system and user PATH");
+
+        string? error = null;
+
+        await AnsiConsole.Progress()
+            .AutoClear(false)
+            .HideCompleted(false)
+            .Columns(new ProgressColumn[]
+            {
+                new TaskDescriptionColumn(),
+                new ProgressBarColumn(),
+                new PercentageColumn(),
+                new ElapsedTimeColumn(),
+                new SpinnerColumn(),
+            })
+            .StartAsync(async ctx =>
+            {
+                var t1 = ctx.AddTask($"[#{C(Theme.Muted)}]Locating cash-ctrl.exe[/]",        maxValue: 100);
+                var t2 = ctx.AddTask($"[#{C(Theme.Muted)}]Navigating to installed path[/]",  maxValue: 100);
+                var t3 = ctx.AddTask($"[#{C(Theme.Muted)}]Removing from user PATH[/]",       maxValue: 100);
+                var t4 = ctx.AddTask($"[#{C(Theme.Muted)}]Deleting cash-ctrl.exe[/]",        maxValue: 100);
+                var t5 = ctx.AddTask($"[#{C(Theme.Muted)}]Cleaning up AppData[/]",           maxValue: 100);
+
+                // ── Task 1: locate exe ───────────────────────────────────────
+                while (t1.Value < 100) { t1.Increment(20); await Task.Delay(80); }
+
+                // ── Task 2: navigate to path ─────────────────────────────────
+                while (t2.Value < 100) { t2.Increment(25); await Task.Delay(70); }
+
+                // ── Task 3: remove from PATH ─────────────────────────────────
+                try { RemoveFromUserPath(installDir); } catch (Exception ex) { error ??= ex.Message; }
+                while (t3.Value < 100) { t3.Increment(20); await Task.Delay(80); }
+
+                // ── Task 4: delete exe ───────────────────────────────────────
+                try
+                {
+                    if (File.Exists(exePath))
+                    {
+                        // Can't delete currently running exe on Windows; schedule via cmd
+                        var bat = Path.Combine(Path.GetTempPath(), "cashctrl_uninstall.bat");
+                        await File.WriteAllTextAsync(bat,
+                            $"@echo off\r\ntimeout /t 2 /nobreak >nul\r\ndel /f /q \"{exePath}\"\r\nrmdir /s /q \"{installDir}\" 2>nul\r\ndel \"%~f0\"");
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName        = "cmd.exe",
+                            Arguments       = $"/c \"{bat}\"",
+                            WindowStyle     = System.Diagnostics.ProcessWindowStyle.Hidden,
+                            CreateNoWindow  = true,
+                            UseShellExecute = true,
+                        });
+                    }
+                }
+                catch (Exception ex) { error ??= ex.Message; }
+                while (t4.Value < 100) { t4.Increment(25); await Task.Delay(60); }
+
+                // ── Task 5: clean AppData ────────────────────────────────────
+                try
+                {
+                    var appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CashCtrl");
+                    if (Directory.Exists(appData))
+                        Directory.Delete(appData, recursive: true);
+                }
+                catch { /* non-fatal */ }
+                while (t5.Value < 100) { t5.Increment(20); await Task.Delay(80); }
+            });
+
+        Console.WriteLine();
+        if (error is null)
+        {
+            AnsiConsole.MarkupLine($"[bold #{C(Theme.Accent)}] \u2714 cash-ctrl was successfully uninstalled.[/]");
+            AnsiConsole.MarkupLine($"[#{C(Theme.Muted)}]   The executable will be removed after this process exits.[/]");
+        }
+        else
+        {
+            AnsiConsole.MarkupLine($"[bold red] \u2717 Uninstall encountered an error:[/] [#{C(Theme.Muted)}]{Markup.Escape(error)}[/]");
+        }
+        Console.WriteLine();
+        AnsiConsole.MarkupLine($"[#{C(Theme.Muted)}]Press any key to exit...[/]");
+        Console.ReadKey(true);
+        AnsiConsole.Clear();
+    }
+
+    private static void RemoveFromUserPath(string dir)
+    {
+        const string regKey = @"Environment";
+        using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(regKey, writable: true);
+        if (key is null) return;
+
+        var current = key.GetValue("Path", "", Microsoft.Win32.RegistryValueOptions.DoNotExpandEnvironmentNames) as string ?? "";
+        var parts   = current.Split(';', StringSplitOptions.RemoveEmptyEntries)
+                             .Where(p => !string.Equals(p.Trim(), dir, StringComparison.OrdinalIgnoreCase))
+                             .ToArray();
+        key.SetValue("Path", string.Join(";", parts), Microsoft.Win32.RegistryValueKind.ExpandString);
+        SendPathChangedMessage();
+    }
+
     // ── Steps ────────────────────────────────────────────────────────────────
 
     private static async Task<string?> PromptInstallDir(string defaultDir)
@@ -218,7 +341,7 @@ public static class InstallerScreen
 
     // ── Rendering helpers ────────────────────────────────────────────────────
 
-    private static void DrawHeader()
+    private static void DrawHeader(string? subtitle = null, string? desc = null)
     {
         AnsiConsole.Clear();
         int w = Math.Max(Console.WindowWidth > 0 ? Console.WindowWidth : 80, 20);
@@ -237,9 +360,9 @@ public static class InstallerScreen
             Console.WriteLine();
         }
 
-        WriteCentered($"[bold #{C(Theme.Primary)}]{Subtitle}[/]", w);
+        WriteCentered($"[bold #{C(Theme.Primary)}]{subtitle ?? Subtitle}[/]", w);
         Console.WriteLine();
-        WriteCentered($"[#{C(Theme.Muted)}]{Markup.Escape(DescLine)}[/]", w);
+        WriteCentered($"[#{C(Theme.Muted)}]{Markup.Escape(desc ?? DescLine)}[/]", w);
         Console.WriteLine();
         AnsiConsole.Write(new Rule { Style = new Style(Theme.Border) });
         Console.WriteLine();

@@ -5,7 +5,7 @@ namespace CashCtrl.Screens;
 
 public static class WelcomeScreen
 {
-    private const string MenuOpen   = "Open controls...";
+    private const string MenuOpen   = "Select your control...";
     private const string MenuCreate = "Create new control";
 
     // ── Public entry points ──────────────────────────────────────────────────
@@ -49,13 +49,12 @@ public static class WelcomeScreen
         }
 
         var names = controls.Select(f => Path.GetFileNameWithoutExtension(f)!).ToList();
-        names.Add("← Back");
 
         AnsiConsole.Clear();
         var selected = RunPanel("Select the control to open", names.Select(n => (n, true)).ToList());
         AnsiConsole.Clear();
 
-        if (selected == "← Back" || selected is null) return;
+        if (selected is null) { await ShowAsync(); return; }
 
         var filePath = controls[names.IndexOf(selected)];
         await OpenControlScreen.ShowAsync(filePath);
@@ -79,7 +78,7 @@ public static class WelcomeScreen
             AnsiConsole.Clear();
             var fallback = RunPanel(
                 "Select the control to open",
-                new[] { ("Create new control", true), ("← Back", true) }.ToList(),
+                new[] { ("Create new control", true)}.ToList(),
                 notice: "No saved controls found.");
             AnsiConsole.Clear();
 
@@ -94,7 +93,7 @@ public static class WelcomeScreen
 
         if (favorites.Count > 0)
         {
-            entries.Add(("Recent", false));
+            entries.Add(("Latest controls", false));
             foreach (var fav in favorites)
             {
                 var label = fav.Name;
@@ -114,17 +113,11 @@ public static class WelcomeScreen
             }
         }
 
-        entries.Add(("← Back", true));
-
         AnsiConsole.Clear();
         var selected = RunPanel("Select the control to open", entries);
         AnsiConsole.Clear();
 
-        if (selected is null || selected.Trim() == "← Back")
-        {
-            await ShowAsync();
-            return;
-        }
+        if (selected is null) { await ShowAsync(); return; }
 
         if (favMap.TryGetValue(selected, out var favEntry))
         {
@@ -189,6 +182,7 @@ public static class WelcomeScreen
             var key = Console.ReadKey(true);
 
             if (key.Key == ConsoleKey.Escape) return null;
+            if (key.KeyChar is 'q' or 'Q')     return null;
             if (key.Key == ConsoleKey.Enter)  return entries[idx].label;
 
             if (key.Key == ConsoleKey.UpArrow)
@@ -296,7 +290,7 @@ public static class WelcomeScreen
         Console.WriteLine();
         Console.Write(blankLine);
         try { Console.SetCursorPosition(0, topRow + entries.Count + 2); } catch { }
-        WriteCentered($"[#{C(Theme.Muted)}]↑↓: select    enter: confirm    esc: quit[/]", w);
+        WriteCentered($"[#{C(Theme.Muted)}]↑↓: select | Enter: confirm | esc: quit[/]", w);
 
         // Park cursor off-screen to prevent blinking on last line
         try { Console.SetCursorPosition(0, topRow + entries.Count + 2); } catch { }
@@ -318,6 +312,7 @@ public static class WelcomeScreen
 
             var key = Console.ReadKey(true);
             if (key.Key == ConsoleKey.Escape) return null;
+            if (key.KeyChar is 'q' or 'Q')   return null;
             if (key.Key == ConsoleKey.Enter)  return entries[idx].label;
 
             if (key.Key == ConsoleKey.UpArrow)
@@ -344,10 +339,10 @@ public static class WelcomeScreen
         int w  = Math.Max(Console.WindowWidth  > 0 ? Console.WindowWidth  : 80, 24);
         int h  = Math.Max(Console.WindowHeight > 0 ? Console.WindowHeight : 24, 8);
 
-        // Panel width: wide enough for the longest entry + padding, max 60
+        // Panel width: wide enough for the longest entry + padding, max 90
         int maxLabel = entries.Max(e => e.label.Length);
-        int pw  = Math.Min(60, Math.Max(38, maxLabel + 8));
-        pw      = Math.Min(pw, w - 2);
+        int pw  = Math.Min(90, Math.Max(48, maxLabel + 10));
+        pw      = Math.Min(pw, w - 4);
         int inner = pw - 2;
         int px  = Math.Max(0, (w - pw) / 2);
 
@@ -401,7 +396,7 @@ public static class WelcomeScreen
         }
 
         lines.Add(Row("", 0));
-        const string hint = "↑↓: select   Enter: confirm   Esc: back";
+        const string hint = "↑↓: select | Enter: confirm | Esc: back";
         var hintTrunc = hint.Length > inner - 2 ? hint[..(inner - 2)] : hint;
         lines.Add(Row($"  [{dim}]{Markup.Escape(hintTrunc)}[/]", 2 + hintTrunc.Length));
         lines.Add(Row("", 0));
@@ -430,7 +425,7 @@ public static class WelcomeScreen
 
     private const int FigletMinWidth = 90;
     private const int SmallFigletMin = 40;
-    private const string Subtitle = "Terminal-native personal finance control";
+    private const string Subtitle = "Command-line finance control software";
     private const string DescLine = "Track expenses and income  ·  store as JSON  ·  open from anywhere";
     private const string DescA    = "Track expenses and income";
     private const string DescB    = "store as JSON  ·  open from anywhere";

@@ -8,6 +8,9 @@ public class ControlFile
     public string Name { get; set; } = string.Empty;
     public string FilePath { get; set; } = string.Empty;
 
+    // Top-level initial budget (new format: "total-amount")
+    public decimal TotalAmount { get; set; }
+
     public Dictionary<string, ControlPeriod> Periods { get; set; } = new();
 }
 

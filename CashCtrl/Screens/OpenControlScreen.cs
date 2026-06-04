@@ -71,7 +71,7 @@ public static class OpenControlScreen
         var red   = "#FF6B6B";
 
         var period   = control.Periods.Values.FirstOrDefault();
-        var total    = (period?.TotalValue ?? 0m) + (period?.TotalIncome ?? 0m);
+        var total    = (period?.TotalValue ?? control.TotalAmount) + (period?.TotalIncome ?? 0m);
         var currency = new System.Globalization.CultureInfo("pt-BR");
 
         string Row(string content)
