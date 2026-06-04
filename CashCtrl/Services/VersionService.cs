@@ -196,12 +196,12 @@ public static class VersionService
         Spectre.Console.AnsiConsole.MarkupLine($"[{dim}]Launching installer...[/]");
         Console.WriteLine();
 
-        // Launch new exe with --install
+        // Launch new exe with --install in its own console window
         try
         {
             var psi = new System.Diagnostics.ProcessStartInfo(tmpPath, "--install")
             {
-                UseShellExecute = false,
+                UseShellExecute = true,
             };
             System.Diagnostics.Process.Start(psi);
         }

@@ -103,9 +103,9 @@ try
 }
 catch (Exception ex) when (ex is not OperationCanceledException)
 {
-    AnsiConsole.Clear();
+    try { AnsiConsole.Clear(); } catch { }
     AnsiConsole.WriteException(ex, ExceptionFormats.ShortenPaths);
-    Console.ReadKey(true);
+    try { Console.ReadKey(true); } catch { }
 }
 finally
 {

@@ -15,7 +15,7 @@ public static class InstallerScreen
     public static async Task ShowAsync()
     {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
-        AnsiConsole.Clear();
+        try { AnsiConsole.Clear(); } catch { }
 
         // Detect the source exe (the running binary)
         var srcExe = Environment.ProcessPath
@@ -40,7 +40,7 @@ public static class InstallerScreen
         // ── Step 4: result screen ────────────────────────────────────────────
         ShowResult(ok, installDir);
         Console.ReadKey(true);
-        AnsiConsole.Clear();
+        try { AnsiConsole.Clear(); } catch { }
     }
 
     // ── Uninstall entry point ────────────────────────────────────────────────
@@ -48,7 +48,7 @@ public static class InstallerScreen
     public static async Task UninstallAsync()
     {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
-        AnsiConsole.Clear();
+        try { AnsiConsole.Clear(); } catch { }
 
         var defaultInstallDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -149,7 +149,7 @@ public static class InstallerScreen
         Console.WriteLine();
         AnsiConsole.MarkupLine($"[#{C(Theme.Muted)}]Press any key to exit...[/]");
         Console.ReadKey(true);
-        AnsiConsole.Clear();
+        try { AnsiConsole.Clear(); } catch { }
     }
 
     private static void RemoveFromUserPath(string dir)
@@ -343,7 +343,7 @@ public static class InstallerScreen
 
     private static void DrawHeader(string? subtitle = null, string? desc = null)
     {
-        AnsiConsole.Clear();
+        try { AnsiConsole.Clear(); } catch { }
         int w = Math.Max(Console.WindowWidth > 0 ? Console.WindowWidth : 80, 20);
 
         if (w >= FigletMinWidth)
