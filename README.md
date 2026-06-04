@@ -8,6 +8,15 @@
     Command-line finance control software
 </h3>
 
+<p align="center">
+  <img src="https://img.shields.io/badge/.NET-10.0-512BD4?style=for-the-badge&logo=dotnet&logoColor=white" alt=".NET 10" />
+  <img src="https://img.shields.io/badge/C%23-12-239120?style=for-the-badge&logo=csharp&logoColor=white" alt="C#" />
+  <img src="https://img.shields.io/badge/Spectre.Console-0.49.1-9D88FF?style=for-the-badge&logo=windows-terminal&logoColor=white" alt="Spectre.Console" />
+  <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows" />
+  <img src="https://img.shields.io/badge/Version-1.0.0-DCD7FF?style=for-the-badge" alt="Version" />
+  <img src="https://img.shields.io/badge/License-MIT-50DC8C?style=for-the-badge" alt="MIT License" />
+</p>
+
 ---
 
 ## Overview
@@ -22,7 +31,7 @@ Each control represents a financial period (e.g., "June 2026") and holds a start
 
 ### Option 1 — TUI installer (recommended)
 
-Download `cash-ctrl.exe` from the [release page](), place it anywhere, then run:
+Download `cash-ctrl.exe` from the [release page](https://github.com/F4NT0/Cash-Ctrl/releases/latest), place it anywhere, then run:
 
 ```powershell
 .\cash-ctrl.exe --install
@@ -60,16 +69,17 @@ cash-ctrl             Open the main welcome menu
 cash-ctrl <name>      Open or create a control by name in the current directory
 cash-ctrl .           Browse controls in the current directory
 cash-ctrl --install   Run the TUI installer (add cash-ctrl to PATH)
+cash-ctrl --uninstall Remove cash-ctrl from PATH and disk
+cash-ctrl --update    Download and install the latest version
 cash-ctrl --help      Show this help message
 cash-ctrl --version   Show the software version
-cash-ctrl --update    Install update version
 ```
 
 ### Examples
 
 ```powershell
 cash-ctrl              # opens main menu
-cash-ctrl June-2026    # opens or creates Junho-2026.json in the current directory
+cash-ctrl June-2026    # opens or creates June-2026.json in the current directory
 cash-ctrl .            # browse in the current directory
 ```
 
@@ -139,11 +149,10 @@ Full-screen TUI with 3 columns at the top, a summary bar in the middle, and an e
 | `S` | Cycle calendar month (when entries span multiple months) |
 | `↑` / `↓` | Navigate focused panel |
 | `Enter` | Confirm / open detail |
-| `D` | Enter delete mode (in list) |
+| `D` | Enter delete mode (in list) / delete control file (in controls panel) |
 | `Space` | Mark entry for deletion (in delete mode) |
+| `F` | Filter inside the list (use `Tab` to change columns) |
 | `Esc` | Cancel / exit focus / quit |
-| F | Filter inside the list (use Tab to change columns |
-
 
 ### New Expense modal
 
@@ -156,7 +165,15 @@ Full-screen TUI with 3 columns at the top, a summary bar in the middle, and an e
 ### New Income modal
 
 - Fields: **Amount added · Date · Origin** (Tab to cycle)
-- **Origin** is a tittle to explain from where the income comes.
+- **Origin** is a title to explain from where the income comes.
+
+> Add images here
+
+### Edit Entry modal
+
+- Allows editing an existing expense or income entry directly from the entry list.
+- Fields: **Name · Amount · Type · Date** (Tab to cycle).
+- Changes take effect immediately and persist to the control file.
 
 > Add images here
 
@@ -182,7 +199,7 @@ Controls are plain `.json` files stored wherever you create them.
 {
   "June 2026": {               
     "total-value": 500.00,     
-    "Fruit Srop": {            
+    "Fruit Shop": {            
       "date": "01/06/2026",      
       "total": 25.00,          
       "type": "market",           
@@ -220,9 +237,35 @@ Controls are plain `.json` files stored wherever you create them.
 
 Favorites and recents are stored in: `%APPDATA%\CashCtrl\favorites.json`
 
+Version info is cached in: `%APPDATA%\CashCtrl\version.json`
+
 ---
 
-## Project structure (If it wants to understand the project)
+## Auto-update
+
+Cash-Ctrl checks the [GitHub Releases](https://github.com/F4NT0/Cash-Ctrl/releases/latest) page in the background at startup and notifies you when a newer version is available. To update:
+
+```powershell
+cash-ctrl --update
+```
+
+This will download the latest `.exe` from GitHub and launch the installer automatically.
+
+---
+
+## Uninstall
+
+To remove Cash-Ctrl from your machine:
+
+```powershell
+cash-ctrl --uninstall
+```
+
+This removes the executable and cleans up the PATH entry.
+
+---
+
+## Project structure
 
 ```
 Cash-Ctrl/
@@ -230,29 +273,31 @@ Cash-Ctrl/
 ├── CashCtrl/
 │   ├── CashCtrl.csproj
 │   ├── Program.cs                    ← CLI entry point & argument routing
-│   ├── Theme.cs                      ← Color palette
+│   ├── AppVersion.cs                 ← Current version constant
+│   ├── Theme.cs                      ← Color palette & panel builders
 │   ├── Fonts/
 │   │   └── ansi-shadow.flf           ← Embedded figlet font
 │   ├── Models/
 │   │   ├── ControlFile.cs            ← Root data model
 │   │   └── ControlEntry.cs           ← Expense / income entry + line items
 │   ├── Services/
-│   │   └── ControlService.cs         ← JSON I/O, favorites, period helpers
+│   │   ├── ControlService.cs         ← JSON I/O, favorites, period helpers
+│   │   └── VersionService.cs         ← GitHub release check & auto-update
 │   └── Screens/
 │       ├── WelcomeScreen.cs          ← Splash + main menu
 │       ├── CreateControlScreen.cs    ← New control wizard
+│       ├── NewControlModal.cs        ← Inline modal to create a control
 │       ├── OpenControlScreen.cs      ← Open existing control
 │       ├── MainScreen.cs             ← Full-screen finance dashboard
 │       ├── NewExpenseModal.cs        ← Add expense with line items
 │       ├── NewIncomeModal.cs         ← Add income
+│       ├── EditEntryModal.cs         ← Edit an existing entry
 │       ├── EditTotalModal.cs         ← Edit initial balance
 │       ├── ExpenseDetailModal.cs     ← View expense line items
-│       └── InstallerScreen.cs        ← TUI installer (PATH setup)
+│       └── InstallerScreen.cs        ← TUI installer & uninstaller (PATH setup)
 ├── dist/
 │   └── cash-ctrl.exe                 ← Self-contained Windows executable
 └── Docs/
     └── Details/
         └── Intro.md
 ```
-
-
