@@ -237,19 +237,6 @@ public static class MainScreen
                 if (k.Key == ConsoleKey.UpArrow && controlsIdx > 0) controlsIdx--;
                 if (k.Key == ConsoleKey.DownArrow && controlsIdx < siblingControls.Count - 1) controlsIdx++;
 
-                if (k.Key == ConsoleKey.Enter && siblingControls.Count > 0)
-                {
-                    if (!isControlsDeleting)
-                    {
-                        var nc = await ControlService.LoadControlAsync(siblingControls[controlsIdx]);
-                        if (nc is not null)
-                        {
-                            control     = nc;
-                            controlsDir = Path.GetDirectoryName(control.FilePath) ?? controlsDir;
-                        }
-                    }
-                }
-
                 // D: enter delete mode for controls
                 if (k.KeyChar is 'd' or 'D' && !isControlsDeleting && siblingControls.Count > 0)
                 {
@@ -283,6 +270,19 @@ public static class MainScreen
                         controlsIdx = Math.Clamp(controlsIdx, 0, siblingControls.Count - 1);
                     }
                     isControlsDeleting = false;
+                    continue;
+                }
+
+                // Enter (normal mode): load selected control and exit Controls focus
+                if (!isControlsDeleting && k.Key == ConsoleKey.Enter && siblingControls.Count > 0)
+                {
+                    var nc = await ControlService.LoadControlAsync(siblingControls[controlsIdx]);
+                    if (nc is not null)
+                    {
+                        control     = nc;
+                        controlsDir = Path.GetDirectoryName(control.FilePath) ?? controlsDir;
+                        focus       = MainFocus.None;
+                    }
                     continue;
                 }
 
@@ -478,13 +478,6 @@ public static class MainScreen
         layout["list"].Update(listPanel);
 
         AnsiConsole.Write(layout);
-
-        // -> UPDATE BANNER (shown when a newer version is detected)
-        if (CashCtrl.Services.VersionService.IsOutdated)
-        {
-            AnsiConsole.MarkupLine(
-                $" [bold yellow]\u26a0 New version available ({CashCtrl.Services.VersionService.LatestVersion}), run cash-ctrl --update to update[/]");
-        }
 
         // -> DYNAMIC FOOTER per focus
         var fk  = Hex(Theme.Focus);

@@ -193,31 +193,79 @@ public static class VersionService
 
         Spectre.Console.AnsiConsole.MarkupLine($"[{acc}]Download complete.[/]");
         Console.WriteLine();
-        Spectre.Console.AnsiConsole.MarkupLine($"[{dim}]Launching installer...[/]");
-        Console.WriteLine();
+        Spectre.Console.AnsiConsole.MarkupLine($"[{dim}]Installing update...[/]");
 
-        // Launch new exe with --install in its own console window
+        // Resolve where the currently installed exe lives
+        var currentExe = Environment.ProcessPath
+                         ?? System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName
+                         ?? string.Empty;
+
+        var defaultInstallDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "CashCtrl");
+        var installDir = string.IsNullOrEmpty(currentExe)
+            ? defaultInstallDir
+            : Path.GetDirectoryName(currentExe) ?? defaultInstallDir;
+        var destExe = Path.Combine(installDir, "cash-ctrl.exe");
+
         try
         {
-            var psi = new System.Diagnostics.ProcessStartInfo(tmpPath, "--install")
+            Directory.CreateDirectory(installDir);
+
+            // Can't overwrite the running exe directly on Windows — schedule via bat
+            var bat = Path.Combine(Path.GetTempPath(), "cashctrl_update.bat");
+            await File.WriteAllTextAsync(bat,
+                $"@echo off\r\n" +
+                $"timeout /t 2 /nobreak >nul\r\n" +
+                $"copy /y \"{tmpPath}\" \"{destExe}\"\r\n" +
+                $"del \"%~f0\"");
+
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
+                FileName        = "cmd.exe",
+                Arguments       = $"/c \"{bat}\"",
+                WindowStyle     = System.Diagnostics.ProcessWindowStyle.Hidden,
+                CreateNoWindow  = true,
                 UseShellExecute = true,
-            };
-            System.Diagnostics.Process.Start(psi);
+            });
+
+            // Ensure install dir is on PATH
+            AddToUserPath(installDir);
+            SaveInstalledVersion();
         }
         catch (Exception ex)
         {
-            Spectre.Console.AnsiConsole.MarkupLine($"[{red}]Could not launch installer: {Spectre.Console.Markup.Escape(ex.Message)}[/]");
+            Spectre.Console.AnsiConsole.MarkupLine($"[{red}]Install failed: {Spectre.Console.Markup.Escape(ex.Message)}[/]");
             Console.ReadKey(true);
             return;
         }
 
-        Spectre.Console.AnsiConsole.MarkupLine(
-            $"[bold {warn}]The installer is running in a new window.[/]");
-        Spectre.Console.AnsiConsole.MarkupLine(
-            $"[{dim}]Once installation is complete, close this terminal and open a new one.[/]");
+        Console.WriteLine();
+        Spectre.Console.AnsiConsole.MarkupLine($"[bold {acc}] \u2714 cash-ctrl {_latestVersion} installed successfully.[/]");
+        Spectre.Console.AnsiConsole.MarkupLine($"[{dim}]   The new executable will be active after this process exits.[/]");
+        Spectre.Console.AnsiConsole.MarkupLine($"[{dim}]   Open a new terminal and run: [/][bold {p}]cash-ctrl[/]");
         Console.WriteLine();
         Spectre.Console.AnsiConsole.MarkupLine($"[{dim}]Press any key to exit...[/]");
         Console.ReadKey(true);
+    }
+
+    private static void AddToUserPath(string dir)
+    {
+        try
+        {
+            const string regKey = @"Environment";
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(regKey, writable: true);
+            if (key is null) return;
+
+            var current = key.GetValue("Path", "", Microsoft.Win32.RegistryValueOptions.DoNotExpandEnvironmentNames) as string ?? "";
+            var parts   = current.Split(';', StringSplitOptions.RemoveEmptyEntries);
+            bool alreadyIn = parts.Any(p => string.Equals(p.Trim(), dir, StringComparison.OrdinalIgnoreCase));
+            if (!alreadyIn)
+            {
+                var newPath = current.TrimEnd(';') + ";" + dir;
+                key.SetValue("Path", newPath, Microsoft.Win32.RegistryValueKind.ExpandString);
+            }
+        }
+        catch { }
     }
 }

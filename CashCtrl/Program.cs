@@ -19,6 +19,7 @@ try
     if (cliArgs.Length == 0)
     {
         // ── cash-ctrl  →  main welcome menu ─────────────────────────────────
+        await Task.Delay(400); // give background version check a head start
         await WelcomeScreen.ShowAsync();
     }
     else if (cliArgs[0] is "--version" or "-v")

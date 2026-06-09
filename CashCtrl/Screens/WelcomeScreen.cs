@@ -151,14 +151,14 @@ public static class WelcomeScreen
         int blankAfterDesc = 2;
         int ruleRows       = 1;
         int blankAfterRule = 1;
-        int versionRows    = 1; // version label or update banner
+        int versionRows    = 1; // version label or update banner (in dynamic block, above menu)
         int noticeRows     = notice is null ? 0 : 2;
         int menuRows       = entries.Count + 1; // +1 leading blank
         int hintsRows      = 2;
 
         int staticH  = figletLines + subtitleRows + descRows + blankAfterDesc
-                       + ruleRows + blankAfterRule + versionRows + noticeRows;
-        int dynamicH = menuRows + hintsRows;
+                       + ruleRows + blankAfterRule + noticeRows;
+        int dynamicH = versionRows + menuRows + hintsRows;
         int contentH = staticH + dynamicH;
         int topPad   = Math.Max(0, (h - contentH) / 2);
 
@@ -167,14 +167,14 @@ public static class WelcomeScreen
         for (int i = 0; i < topPad; i++) Console.WriteLine();
         DrawStaticHeader(w, notice);
 
-        // Remember the row where the dynamic block starts
+        // Remember the row where the dynamic block starts (includes version row)
         int menuTop = Console.CursorTop;
 
         // Pre-fill dynamic area so first redraw doesn't scroll
         var blankLine = new string(' ', w);
         for (int i = 0; i < dynamicH; i++) Console.WriteLine(blankLine);
 
-        // ── Interactive loop — only redraws menu+hints ────────────────────
+        // ── Interactive loop — only redraws version+menu+hints ──────────────
         while (true)
         {
             DrawDynamic(entries, idx, w, menuTop);
@@ -236,12 +236,6 @@ public static class WelcomeScreen
         AnsiConsole.Write(new Rule { Style = new Style(Theme.Border) });
         Console.WriteLine();
 
-        // Version label or update banner
-        if (CashCtrl.Services.VersionService.IsOutdated)
-            WriteCentered($"[bold yellow]\u26a0 New version available ({CashCtrl.Services.VersionService.LatestVersion}), run cash-ctrl --update to update[/]", w);
-        else
-            WriteCentered($"[#{C(Theme.Muted)}]{CashCtrl.AppVersion.Current}[/]", w);
-
         // Optional notice
         if (notice is not null)
         {
@@ -262,11 +256,15 @@ public static class WelcomeScreen
 
         var blankLine = new string(' ', w);
 
-        // Leading blank
+        // Version label or update banner (redrawn on every keypress)
         Console.Write(blankLine);
-        Console.WriteLine();
+        try { Console.SetCursorPosition(0, topRow); } catch { }
+        if (CashCtrl.Services.VersionService.IsOutdated)
+            WriteCentered($"[bold yellow]\u26a0 New version available ({CashCtrl.Services.VersionService.LatestVersion}), run cash-ctrl --update to update[/]", w);
+        else
+            WriteCentered($"[#{C(Theme.Muted)}]{CashCtrl.AppVersion.Current}[/]", w);
 
-        // Menu items
+        // Menu items (offset by +1 for the version row)
         for (int i = 0; i < entries.Count; i++)
         {
             var (label, selectable) = entries[i];
@@ -285,15 +283,15 @@ public static class WelcomeScreen
             WriteCentered(rendered, w);
         }
 
-        // Blank separator + hints
+        // Blank separator + hints (offset by +1 for version row)
         Console.Write(blankLine);
         Console.WriteLine();
         Console.Write(blankLine);
-        try { Console.SetCursorPosition(0, topRow + entries.Count + 2); } catch { }
+        try { Console.SetCursorPosition(0, topRow + entries.Count + 3); } catch { }
         WriteCentered($"[#{C(Theme.Muted)}]↑↓: select | Enter: confirm | esc: quit[/]", w);
 
         // Park cursor off-screen to prevent blinking on last line
-        try { Console.SetCursorPosition(0, topRow + entries.Count + 2); } catch { }
+        try { Console.SetCursorPosition(0, topRow + entries.Count + 3); } catch { }
     }
 
     // ── Centered panel selector (used for open-control flows) ────────────────
