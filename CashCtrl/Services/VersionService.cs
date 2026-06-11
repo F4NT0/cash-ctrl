@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Spectre.Console;
 
 namespace CashCtrl.Services;
 
@@ -6,10 +7,6 @@ public static class VersionService
 {
     private const string GitHubApiUrl =
         "https://api.github.com/repos/F4NT0/Cash-Ctrl/releases/latest";
-
-    private const string AppDataDir =
-        // Evaluated at runtime via property below
-        "";
 
     private static string VersionFilePath =>
         Path.Combine(
@@ -71,9 +68,7 @@ public static class VersionService
     {
         try
         {
-            using var http = new System.Net.Http.HttpClient();
-            http.Timeout = TimeSpan.FromSeconds(2);
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("cash-ctrl/" + AppVersion.Current);
+            using var http = BuildApiClient(timeout: TimeSpan.FromSeconds(10));
 
             var json = await http.GetStringAsync(GitHubApiUrl);
             using var doc = JsonDocument.Parse(json);
@@ -116,86 +111,114 @@ public static class VersionService
         return Parse(remote) > Parse(local);
     }
 
+    // ── HttpClient factory ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// Creates an HttpClient for the GitHub REST API (JSON responses).
+    /// </summary>
+    private static System.Net.Http.HttpClient BuildApiClient(TimeSpan timeout)
+    {
+        var http = new System.Net.Http.HttpClient();
+        http.Timeout = timeout;
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("cash-ctrl/" + AppVersion.Current);
+        http.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+        return http;
+    }
+
+    /// <summary>
+    /// Creates an HttpClient for binary asset downloads (follows redirects).
+    /// </summary>
+    private static System.Net.Http.HttpClient BuildDownloadClient(TimeSpan timeout)
+    {
+        var handler = new System.Net.Http.HttpClientHandler
+        {
+            AllowAutoRedirect = true,
+            MaxAutomaticRedirections = 10,
+        };
+        var http = new System.Net.Http.HttpClient(handler);
+        http.Timeout = timeout;
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("cash-ctrl/" + AppVersion.Current);
+        http.DefaultRequestHeaders.Accept.ParseAdd("application/octet-stream");
+        return http;
+    }
+
     // ── --update flow ────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Downloads the latest exe from GitHub, saves it to a temp file, runs it with --install,
-    /// then prints instructions to restart the terminal.
+    /// Downloads the latest exe from GitHub releases and installs it, showing
+    /// a step-by-step Spectre.Console Progress display for each operation.
     /// </summary>
     public static async Task PerformUpdateAsync()
     {
-        var p    = $"#{Theme.Primary.R:X2}{Theme.Primary.G:X2}{Theme.Primary.B:X2}";
-        var acc  = $"#{Theme.Accent.R:X2}{Theme.Accent.G:X2}{Theme.Accent.B:X2}";
-        var dim  = $"#{Theme.Muted.R:X2}{Theme.Muted.G:X2}{Theme.Muted.B:X2}";
-        var warn = "#FFD700";
-        var red  = "#FF6B6B";
+        var colP   = $"#{Theme.Primary.R:X2}{Theme.Primary.G:X2}{Theme.Primary.B:X2}";
+        var colAcc = $"#{Theme.Accent.R:X2}{Theme.Accent.G:X2}{Theme.Accent.B:X2}";
+        var colDim = $"#{Theme.Muted.R:X2}{Theme.Muted.G:X2}{Theme.Muted.B:X2}";
 
-        Spectre.Console.AnsiConsole.Clear();
-        Spectre.Console.AnsiConsole.MarkupLine($"[bold {p}]Cash-Ctrl Update[/]");
-        Console.WriteLine();
+        AnsiConsole.Clear();
+        AnsiConsole.Write(
+            new FigletText("Cash-Ctrl")
+                .Centered()
+                .Color(Color.Purple));
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine($"[bold {colP}]  Update Manager[/]");
+        AnsiConsole.WriteLine();
 
-        // Ensure we have the latest info
-        if (_latestVersion is null)
+        // ── Pre-flight: ensure we know the latest release ────────────────────
+        if (!_checkDone)
         {
-            Spectre.Console.AnsiConsole.MarkupLine($"[{dim}]Checking for latest release...[/]");
-            _latestVersion = await FetchLatestAsync();
-            _checkDone = true;
+            await AnsiConsole.Status()
+                .Spinner(Spinner.Known.Dots)
+                .SpinnerStyle(Style.Parse($"bold {colAcc}"))
+                .StartAsync($"[{colDim}]Contacting GitHub to check for updates...[/]", async _ =>
+                {
+                    _latestVersion = await FetchLatestAsync();
+                    _checkDone = true;
+                });
         }
 
         if (_latestVersion is null)
         {
-            Spectre.Console.AnsiConsole.MarkupLine($"[{red}]Could not reach GitHub. Check your connection and try again.[/]");
+            AnsiConsole.MarkupLine($"[red] Could not reach GitHub. Check your connection and try again.[/]");
+            AnsiConsole.MarkupLine($"[{colDim}]Press any key to exit...[/]");
             Console.ReadKey(true);
             return;
         }
 
         if (!IsOutdated)
         {
-            Spectre.Console.AnsiConsole.MarkupLine($"[{acc}]You are already on the latest version ({AppVersion.Current}).[/]");
+            AnsiConsole.Write(new Panel(
+                new Markup($"[bold {colAcc}] You are already on the latest version![/]\n\n" +
+                           $"[{colDim}]Installed version:[/] [bold white]{AppVersion.Current}[/]"))
+            {
+                Header = new PanelHeader("[bold]No update available[/]"),
+                Border = BoxBorder.Rounded,
+                Padding = new Padding(2, 1, 2, 1),
+            });
+            AnsiConsole.WriteLine();
+            AnsiConsole.MarkupLine($"[{colDim}]Press any key to exit...[/]");
             Console.ReadKey(true);
             return;
         }
-
-        Spectre.Console.AnsiConsole.MarkupLine(
-            $"[{dim}]Current:[/] [{p}]{AppVersion.Current}[/]   " +
-            $"[{dim}]Latest:[/]  [{acc}]{_latestVersion}[/]");
-        Console.WriteLine();
 
         var downloadUrl = LatestExeDownloadUrl;
         if (downloadUrl is null)
         {
-            Spectre.Console.AnsiConsole.MarkupLine(
-                $"[{warn}]No .exe asset found in the release. " +
-                $"Download manually from:[/] [bold {p}]https://github.com/F4NT0/Cash-Ctrl/releases/latest[/]");
+            AnsiConsole.MarkupLine(
+                $"[yellow] No .exe asset found in the release. " +
+                $"Download manually at:[/] [bold {colP}]https://github.com/F4NT0/Cash-Ctrl/releases/latest[/]");
+            AnsiConsole.MarkupLine($"[{colDim}]Press any key to exit...[/]");
             Console.ReadKey(true);
             return;
         }
 
-        // Download to temp file
-        var tmpPath = Path.Combine(Path.GetTempPath(), "cash-ctrl-update.exe");
-        Spectre.Console.AnsiConsole.MarkupLine($"[{dim}]Downloading {_latestVersion}...[/]");
+        // Show version summary before starting
+        AnsiConsole.Write(new Rule($"[bold {colP}]Update available[/]").RuleStyle(Style.Parse(colDim)));
+        AnsiConsole.MarkupLine($"  [{colDim}]Current version:[/]  [bold white]{AppVersion.Current}[/]");
+        AnsiConsole.MarkupLine($"  [{colDim}]New version    :[/]  [bold {colAcc}]{_latestVersion}[/]");
+        AnsiConsole.MarkupLine($"  [{colDim}]Source         :[/]  [{colDim}]{downloadUrl}[/]");
+        AnsiConsole.WriteLine();
 
-        try
-        {
-            using var http = new System.Net.Http.HttpClient();
-            http.Timeout = TimeSpan.FromSeconds(60);
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("cash-ctrl/" + AppVersion.Current);
-
-            var bytes = await http.GetByteArrayAsync(downloadUrl);
-            await File.WriteAllBytesAsync(tmpPath, bytes);
-        }
-        catch (Exception ex)
-        {
-            Spectre.Console.AnsiConsole.MarkupLine($"[{red}]Download failed: {Spectre.Console.Markup.Escape(ex.Message)}[/]");
-            Console.ReadKey(true);
-            return;
-        }
-
-        Spectre.Console.AnsiConsole.MarkupLine($"[{acc}]Download complete.[/]");
-        Console.WriteLine();
-        Spectre.Console.AnsiConsole.MarkupLine($"[{dim}]Installing update...[/]");
-
-        // Resolve where the currently installed exe lives
+        // ── Resolve install directory ────────────────────────────────────────
         var currentExe = Environment.ProcessPath
                          ?? System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName
                          ?? string.Empty;
@@ -206,46 +229,226 @@ public static class VersionService
         var installDir = string.IsNullOrEmpty(currentExe)
             ? defaultInstallDir
             : Path.GetDirectoryName(currentExe) ?? defaultInstallDir;
-        var destExe = Path.Combine(installDir, "cash-ctrl.exe");
+        var destExe  = Path.Combine(installDir, "cash-ctrl.exe");
+        var tmpPath  = Path.Combine(Path.GetTempPath(), "cash-ctrl-update.exe");
+        var batPath  = Path.Combine(Path.GetTempPath(), "cashctrl_update.bat");
 
-        try
-        {
-            Directory.CreateDirectory(installDir);
+        // ── Step-by-step Progress Display ────────────────────────────────────
+        string? stepError = null;
 
-            // Can't overwrite the running exe directly on Windows — schedule via bat
-            var bat = Path.Combine(Path.GetTempPath(), "cashctrl_update.bat");
-            await File.WriteAllTextAsync(bat,
-                $"@echo off\r\n" +
-                $"timeout /t 2 /nobreak >nul\r\n" +
-                $"copy /y \"{tmpPath}\" \"{destExe}\"\r\n" +
-                $"del \"%~f0\"");
-
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        await AnsiConsole.Progress()
+            .AutoRefresh(true)
+            .AutoClear(false)
+            .HideCompleted(false)
+            .Columns(
+                new SpinnerColumn(),
+                new TaskDescriptionColumn { Alignment = Justify.Left },
+                new ProgressBarColumn(),
+                new PercentageColumn(),
+                new ElapsedTimeColumn())
+            .StartAsync(async ctx =>
             {
-                FileName        = "cmd.exe",
-                Arguments       = $"/c \"{bat}\"",
-                WindowStyle     = System.Diagnostics.ProcessWindowStyle.Hidden,
-                CreateNoWindow  = true,
-                UseShellExecute = true,
+                // ── Step 1: Verify release on GitHub ────────────────────────
+                var t1 = ctx.AddTask("[yellow]Step 1/5[/] Verifying release on GitHub", maxValue: 100);
+                t1.Increment(50);
+                await Task.Delay(300);
+                t1.Description = $"[green]Step 1/5[/] Release [bold]{_latestVersion}[/] found on GitHub \u2714";
+                t1.Increment(50);
+                await Task.Delay(200);
+
+                // ── Step 2: Download executable ──────────────────────────────
+                var t2 = ctx.AddTask("[yellow]Step 2/5[/] Downloading cash-ctrl.exe from GitHub...", maxValue: 100);
+                t2.Increment(5);
+
+                try
+                {
+                    // Use streaming download with progress reporting
+                    using var http = BuildDownloadClient(timeout: TimeSpan.FromMinutes(5));
+
+                    // HEAD to get content length (best-effort)
+                    long totalBytes = 0;
+                    try
+                    {
+                        using var head = await http.SendAsync(
+                            new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Head, downloadUrl));
+                        totalBytes = head.Content.Headers.ContentLength ?? 0;
+                    }
+                    catch { }
+
+                    using var response = await http.GetAsync(
+                        downloadUrl,
+                        System.Net.Http.HttpCompletionOption.ResponseHeadersRead);
+
+                    response.EnsureSuccessStatusCode();
+
+                    if (totalBytes == 0)
+                        totalBytes = response.Content.Headers.ContentLength ?? 0;
+
+                    await using var contentStream = await response.Content.ReadAsStreamAsync();
+                    await using var fileStream    = new FileStream(tmpPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true);
+
+                    var buffer    = new byte[81920];
+                    long received = 0;
+                    int  read;
+
+                    while ((read = await contentStream.ReadAsync(buffer)) > 0)
+                    {
+                        await fileStream.WriteAsync(buffer.AsMemory(0, read));
+                        received += read;
+
+                        if (totalBytes > 0)
+                        {
+                            // map received bytes to 5–95 % of this task
+                            var pct = (double)received / totalBytes * 90.0;
+                            t2.Value = 5 + pct;
+                        }
+                        else
+                        {
+                            // unknown size — pulse spinner near 50 %
+                            if (t2.Value < 80) t2.Increment(0.5);
+                        }
+                    }
+
+                    var sizeMb = received / 1_048_576.0;
+                    t2.Value = 100;
+                    t2.Description = $"[green]Step 2/5[/] Download complete \u2714  ({sizeMb:F1} MB saved to temp)";
+                    await Task.Delay(200);
+                }
+                catch (Exception ex)
+                {
+                    t2.Value = 100;
+                    t2.Description = $"[red]Step 2/5[/] Download failed \u2718  ({Markup.Escape(ex.Message)})";
+                    stepError = ex.Message;
+                    return;
+                }
+
+                // ── Step 3: Prepare install directory ───────────────────────
+                var t3 = ctx.AddTask("[yellow]Step 3/5[/] Preparing install directory...", maxValue: 100);
+                t3.Increment(30);
+                await Task.Delay(200);
+
+                try
+                {
+                    Directory.CreateDirectory(installDir);
+                    t3.Description = $"[green]Step 3/5[/] Directory ready \u2714  ({installDir})";
+                    t3.Value = 100;
+                    await Task.Delay(200);
+                }
+                catch (Exception ex)
+                {
+                    t3.Value = 100;
+                    t3.Description = $"[red]Step 3/5[/] Failed to create directory \u2718  ({Markup.Escape(ex.Message)})";
+                    stepError = ex.Message;
+                    return;
+                }
+
+                // ── Step 4: Create replacement script (.bat) ────────────────
+                var t4 = ctx.AddTask("[yellow]Step 4/5[/] Creating executable replacement script...", maxValue: 100);
+                t4.Increment(20);
+                await Task.Delay(200);
+
+                try
+                {
+                    // The bat retries the copy up to 10 times (1 s apart) to handle
+                    // the case where the parent process hasn't fully exited yet,
+                    // then verifies that the destination file exists before cleaning up.
+                    var batContent =
+                        "@echo off\r\n" +
+                        "setlocal\r\n" +
+                        "set RETRIES=0\r\n" +
+                        ":retry\r\n" +
+                        "timeout /t 1 /nobreak >nul\r\n" +
+                        $"copy /y \"{tmpPath}\" \"{destExe}\" >nul 2>&1\r\n" +
+                        "if errorlevel 1 (\r\n" +
+                        "  set /a RETRIES+=1\r\n" +
+                        "  if %RETRIES% lss 10 goto retry\r\n" +
+                        ")\r\n" +
+                        $"if exist \"{destExe}\" (\r\n" +
+                        $"  del \"{tmpPath}\" >nul 2>&1\r\n" +
+                        ")\r\n" +
+                        "del \"%~f0\"\r\n";
+
+                    await File.WriteAllTextAsync(batPath, batContent);
+
+                    t4.Description = $"[green]Step 4/5[/] Replacement script created \u2714  ({batPath})";
+                    t4.Value = 100;
+                    await Task.Delay(200);
+                }
+                catch (Exception ex)
+                {
+                    t4.Value = 100;
+                    t4.Description = $"[red]Step 4/5[/] Failed to create script \u2718  ({Markup.Escape(ex.Message)})";
+                    stepError = ex.Message;
+                    return;
+                }
+
+                // ── Step 5: Start installation and update PATH ───────────────
+                var t5 = ctx.AddTask("[yellow]Step 5/5[/] Starting installation and updating PATH...", maxValue: 100);
+                t5.Increment(20);
+                await Task.Delay(200);
+
+                try
+                {
+                    // Launch the bat detached so it outlives this process
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName        = "cmd.exe",
+                        Arguments       = $"/c \"{batPath}\"",
+                        WindowStyle     = System.Diagnostics.ProcessWindowStyle.Hidden,
+                        CreateNoWindow  = true,
+                        UseShellExecute = true,
+                    });
+
+                    t5.Increment(40);
+                    await Task.Delay(300);
+
+                    AddToUserPath(installDir);
+                    SaveInstalledVersion();
+
+                    t5.Description = $"[green]Step 5/5[/] Installation scheduled and PATH updated \u2714";
+                    t5.Value = 100;
+                    await Task.Delay(200);
+                }
+                catch (Exception ex)
+                {
+                    t5.Value = 100;
+                    t5.Description = $"[red]Step 5/5[/] Installation failed \u2718  ({Markup.Escape(ex.Message)})";
+                    stepError = ex.Message;
+                }
             });
 
-            // Ensure install dir is on PATH
-            AddToUserPath(installDir);
-            SaveInstalledVersion();
-        }
-        catch (Exception ex)
+        // ── Final summary ────────────────────────────────────────────────────
+        AnsiConsole.WriteLine();
+
+        if (stepError is not null)
         {
-            Spectre.Console.AnsiConsole.MarkupLine($"[{red}]Install failed: {Spectre.Console.Markup.Escape(ex.Message)}[/]");
-            Console.ReadKey(true);
-            return;
+            AnsiConsole.Write(new Panel(
+                new Markup($"[red bold] Update failed[/]\n\n" +
+                           $"[white]Error: {Markup.Escape(stepError)}[/]\n\n" +
+                           $"[{colDim}]You can download manually at:\n" +
+                           $"[/][bold {colP}]https://github.com/F4NT0/Cash-Ctrl/releases/latest[/]"))
+            {
+                Header  = new PanelHeader("[bold red]Error[/]"),
+                Border  = BoxBorder.Rounded,
+                Padding = new Padding(2, 1, 2, 1),
+            });
+        }
+        else
+        {
+            AnsiConsole.Write(new Panel(
+                new Markup($"[bold {colAcc}] cash-ctrl {_latestVersion} installed successfully![/]\n\n" +
+                           $"[{colDim}]Executable installed at:[/] [bold white]{destExe}[/]\n" +
+                           $"[{colDim}]The new executable will be active after closing this process.[/]\n\n" +
+                           $"[{colDim}]Open a new terminal and run:[/] [bold {colP}]cash-ctrl[/]"))
+            {
+                Header  = new PanelHeader("[bold]Update Complete[/]"),
+                Border  = BoxBorder.Rounded,
+                Padding = new Padding(2, 1, 2, 1),
+            });
         }
 
-        Console.WriteLine();
-        Spectre.Console.AnsiConsole.MarkupLine($"[bold {acc}] \u2714 cash-ctrl {_latestVersion} installed successfully.[/]");
-        Spectre.Console.AnsiConsole.MarkupLine($"[{dim}]   The new executable will be active after this process exits.[/]");
-        Spectre.Console.AnsiConsole.MarkupLine($"[{dim}]   Open a new terminal and run: [/][bold {p}]cash-ctrl[/]");
-        Console.WriteLine();
-        Spectre.Console.AnsiConsole.MarkupLine($"[{dim}]Press any key to exit...[/]");
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine($"[{colDim}]Press any key to exit...[/]");
         Console.ReadKey(true);
     }
 

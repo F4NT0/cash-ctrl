@@ -145,16 +145,16 @@ public static class WelcomeScreen
         int h = Math.Max(Console.WindowHeight > 0 ? Console.WindowHeight : 24, 6);
 
         // ── measure heights ───────────────────────────────────────────────
-        int figletLines    = FigletHeight(w);
-        int subtitleRows   = 1;
-        int descRows       = w >= DescLine.Length + 4 ? 1 : 2;
-        int blankAfterDesc = 2;
-        int ruleRows       = 1;
-        int blankAfterRule = 1;
-        int versionRows    = 1; // version label or update banner (in dynamic block, above menu)
-        int noticeRows     = notice is null ? 0 : 2;
-        int menuRows       = entries.Count + 1; // +1 leading blank
-        int hintsRows      = 2;
+        int figletLines      = FigletHeight(w);
+        int subtitleRows     = 2; // WriteCentered(subtitle) + extra Console.WriteLine() blank
+        int descRows         = w >= DescLine.Length + 4 ? 1 : 2;
+        int blankAfterDesc   = 2;
+        int ruleRows         = 1;
+        int blankAfterRule   = 1;
+        int versionRows      = 1; // version label or update banner (in dynamic block, above menu)
+        int noticeRows       = notice is null ? 0 : 2;
+        int menuRows         = entries.Count + 1; // +1 leading blank
+        int hintsRows        = 2;
 
         int staticH  = figletLines + subtitleRows + descRows + blankAfterDesc
                        + ruleRows + blankAfterRule + noticeRows;
@@ -278,16 +278,18 @@ public static class WelcomeScreen
                 rendered = $"[#{C(Theme.Secondary)}]{Markup.Escape(label)}[/]";
 
             // Clear the line first, then write centered
+            try { Console.SetCursorPosition(0, topRow + 1 + i); } catch { }
             Console.Write(blankLine);
             try { Console.SetCursorPosition(0, topRow + 1 + i); } catch { }
             WriteCentered(rendered, w);
         }
 
         // Blank separator + hints (offset by +1 for version row)
+        try { Console.SetCursorPosition(0, topRow + entries.Count + 1); } catch { }
         Console.Write(blankLine);
-        Console.WriteLine();
+        try { Console.SetCursorPosition(0, topRow + entries.Count + 2); } catch { }
         Console.Write(blankLine);
-        try { Console.SetCursorPosition(0, topRow + entries.Count + 3); } catch { }
+        try { Console.SetCursorPosition(0, topRow + entries.Count + 2); } catch { }
         WriteCentered($"[#{C(Theme.Muted)}]↑↓: select | Enter: confirm | esc: quit[/]", w);
 
         // Park cursor off-screen to prevent blinking on last line

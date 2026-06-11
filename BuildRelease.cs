@@ -132,7 +132,7 @@ await AnsiConsole.Progress()
             await Task.Delay(1000);
 
             var publishResult = await RunCommandAsync("dotnet",
-                $"publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o {publishDir}");
+                $"publish -c Release -o {publishDir}");
 
             task3.Increment(50);
             await Task.Delay(1000);
@@ -174,8 +174,8 @@ AnsiConsole.Write(
     new Panel(
         new Markup($"[bold green]Build & Release Complete![/]\n\n" +
                   $"[white]Version : {versionTag}[/]\n" +
-                  $"[white]Executable : {exePath}[/]\n" +
-                  $"[cyan]Release URL: https://github.com/F4NT0/Cash-Ctrl/releases/tag/{versionTag}[/]"))
+                  $"[white]Executable : {exePath}[/]\n")
+        )
     {
         Header = new PanelHeader("[bold cyan]Summary[/]"),
         Border = BoxBorder.Rounded,
@@ -185,6 +185,7 @@ AnsiConsole.Write(
 return 0;
 
 // ── Helper ────────────────────────────────────────────────────────────────────
+
 async Task<(int ExitCode, string Output)> RunCommandAsync(string command, string args)
 {
     var processInfo = new ProcessStartInfo
