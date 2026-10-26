@@ -31,7 +31,13 @@ Each control represents a financial period (e.g., "June 2026") and holds a start
 
 ### Option 1 — Standalone installer (recommended)
 
-Download `cash-ctrl-installer.exe` and run it. A Spectre.Console TUI shows the plan and the status of each step:
+Run this single PowerShell command to download `cash-ctrl-installer.exe` from the [latest release](https://github.com/F4NT0/Cash-Ctrl/releases/latest) and start it in the terminal:
+
+```powershell
+$f="$env:TEMP\cash-ctrl-installer.exe"; iwr https://github.com/F4NT0/Cash-Ctrl/releases/latest/download/cash-ctrl-installer.exe -OutFile $f; & $f
+```
+
+You can also download `cash-ctrl-installer.exe` manually and run it. A Spectre.Console TUI shows the plan and the status of each step:
 
 1. Check for an existing installation (asks whether to delete the old version and install the new one)
 2. Fetch the latest release from GitHub
@@ -117,7 +123,9 @@ Shows the `CASH-CTRL` figlet logo and a keyboard-navigable menu:
 
 Navigation: `↑↓` select · `Enter` confirm · `Esc` quit
 
-> Add image here
+<p align="center">
+  <img src="images/1-menu-rounded.png" alt="Welcome screen" width="600" />
+</p>
 
 ### Create new Control
 
@@ -126,55 +134,94 @@ Step-by-step form:
 2. Auto-preview of the save path
 3. Starting balance (in BRL)
 
-> Add image here
+<p align="center">
+  <img src="images/2-new-control-rounded.png" alt="Create new control" width="600" />
+</p>
+
+Before the control is created and opened, a **confirmation** screen shows the data you entered (name, file path and starting balance). Review them and:
+- `Enter` — confirm and create the control
+- `V` — preview the JSON that will be written
+- `Esc` — cancel without creating anything
+
+<p align="center">
+  <img src="images/3-confirm-new-control-rounded.png" alt="Confirm new control" width="600" />
+</p>
+
+After confirming, the new control opens on the main screen. Since nothing was added yet, it is empty:
+
+<p align="center">
+  <img src="images/3-new-control-empty-rounded.png" alt="New empty control" width="800" />
+</p>
+
+| Area | Description |
+|---|---|
+| **Controls** (top left) | Lists the controls found in the same directory. The open one is marked with `>` and highlighted. Focus with `C` |
+| **Expense types** (top center) | Spending by category. Shows `(no expenses yet)` until the first expense is added |
+| **Calendar** (top right) | Calendar of the current month. Days with entries are colored (red = expense, green = income, purple = both); empty for now |
+| **Total Amount** | Starting balance plus incomes. Here it shows the initial amount set on creation (`R$ 320,00`) |
+| **Total Expenses** | Sum of all expenses. `R$ 0,00` while there are none |
+| **Available value** | Total Amount minus Total Expenses. Green when positive, red when negative |
+| **Clock** | Current time |
+| **Expense / Income list** | Every expense and income entry. Shows `(no entries yet)` until one is added |
+| **Footer bar** | Shortcuts: `C` controls · `B` balance · `I` income · `E` expense · `L` list. Press `?` for all commands |
+
+To start, press `E` to add an expense or `I` to add an income.
 
 ### Open Control
 
-Preview panel showing the control name, total balance, and file path. Confirm with `Enter`, cancel with `Esc`.
+Choose **Open controls** on the welcome screen to list your latest controls. Select one of the controls you already created with `↑` / `↓` and press `Enter`. `Esc` goes back.
 
-> Add image here
+<p align="center">
+  <img src="images/4-open-control-rounded.png" alt="Select the control to open" width="500" />
+</p>
 
-### Main screen
-
-Full-screen TUI with 3 columns at the top, a summary bar in the middle, and an entry list at the bottom.
-
-**Top panels:**
-
-- **Controls** — navigate between control files in the same directory
-- **Expense types** — bar chart of spending by category
-- **Calendar** — monthly calendar with colour-coded days (red = expense, green = income, purple = both)
-
-**Middle bar:** Total Amount · Total Expenses · Available value · Clock
-
-**Entry list:** Date · Name · Type · Amount · Origin — sortable, navigable, with detail view and delete mode
-
-> Add image here
-
-#### Main screen keyboard shortcuts
+After selecting, a preview panel shows the control name, its value and the file path, with the options available for an existing control:
 
 | Key | Action |
 |---|---|
-| `?` | Open the help panel with every available command |
-| `C` | Focus the controls panel |
-| `B` | Focus the balance; press again to edit the initial total balance |
-| `I` | Focus the balance; press again to add a new income |
-| `E` | Add a new expense |
-| `L` | Focus the entry list |
-| `K` | Open the floating calculator |
-| `S` | Cycle calendar month (when entries span multiple months) |
-| `↑` / `↓` | Navigate focused panel |
-| `Enter` | Confirm / open detail |
-| `D` | Enter delete mode (in list) / delete control file (in controls panel) |
-| `Space` | Mark entry for deletion (in delete mode) |
-| `F` | Filter inside the list (use `Tab` to change columns) |
-| `Esc` | Step back: cancel mode, exit focus, then return to the start screen |
-| `Q` | Quit the whole software |
+| `Enter` | Open the control on the main screen |
+| `Delete` / `D` | Delete the control |
+| `Esc` | Go back |
 
-The footer bar only shows `C`, `B`, `I`, `E` and `L`; the other shortcuts are hidden but listed in the help panel (`?`).
+<p align="center">
+  <img src="images/4-open-control-options-rounded.png" alt="Open control options" width="600" />
+</p>
+
+### Adding Expenses
+
+To add a new expense, press `E` on the keyboard. The **New Expense** modal opens:
+
+<p align="center">
+  <img src="images/5-add-expense-rounded.png" alt="New expense" width="600" />
+</p>
+
+- Fields: **Name · Amount · Type · Date** (`Tab` moves to the next field)
+- `Enter` saves, `Esc` cancels
+
+If the expense is a shopping list, press `+` to add items. Each item has a name, quantity, size (`Kg` / `Un`) and a value. For `Kg` items the amount is calculated automatically from the per-item price:
+
+<p align="center">
+  <img src="images/5-add-item-expense-rounded.png" alt="New expense with items" width="600" />
+</p>
+
+After saving, the expense shows up in several places of the main screen:
+
+<p align="center">
+  <img src="images/5-expense-visualization-rounded.png" alt="Expense visualization" width="800" />
+</p>
+
+1. **Expense types** — the type of the expense (`Credit Card`) with the total spent in it (`R$ 100,00`), in the color chosen for that type
+2. **Total Expenses** — the sum of all expenses; **Available value** is reduced by the same amount
+3. **Expense / Income list** — the entry with its date, name, type, amount and origin (`expense`)
+4. **Calendar** — the day of the expense is highlighted in red
 
 ### Calculator (`K`)
 
 Floating panel on the top right. Type with the keyboard: digits, `.` or `,`, `+ - * / ^ %`, parentheses (`x` also multiplies).
+
+<p align="center">
+  <img src="images/6-calculator-rounded.png" alt="Calculator" width="350" />
+</p>
 
 - `Enter` calculates; the result can be continued by typing an operator
 - `Del` clears the current line, `Backspace` removes a character
@@ -185,38 +232,85 @@ Floating panel on the top right. Type with the keyboard: digits, `.` or `,`, `+ 
 
 Floating panel listing every command for the main screen, entry list and calculator. Press any key to close.
 
-### New Expense modal
+<p align="center">
+  <img src="images/8-help-rounded.png" alt="Help" width="500" />
+</p>
 
-- Fields: **Name · Amount · Type · Date** (Tab to cycle).
-- Press `+` to add line items with quantity, unit (Kg / Un), and per-item price.
-- Amount is calculated automatically for Kg items.
+### Add Income
 
-> Add images here
+When you receive some amount, press `I` on the keyboard. The first press focuses the **Total Amount** panel; press `I` again to open the **Income** modal:
 
-### New Income modal
+<p align="center">
+  <img src="images/9-income-money-rounded.png" alt="Add income" width="800" />
+</p>
 
-- Fields: **Amount added · Date · Origin** (Tab to cycle)
-- **Origin** is a title to explain from where the income comes.
+- The top shows the current **Total Amount**
+- Fields: **Amount added · Date · Origin** (`Tab` moves to the next field)
+- **Origin** is a title that explains where the income comes from (e.g. `New money entry`, `Salary`)
+- `Enter` saves, `Esc` cancels
 
-> Add images here
+After saving, the income updates the main screen in these places:
+
+<p align="center">
+  <img src="images/9-after-income-rounded.png" alt="Main screen after adding an income" width="800" />
+</p>
+
+1. **Total Amount** — the income is added to the balance (`R$ 320,00` + `R$ 100,00` = `R$ 420,00`)
+2. **Expense / Income list** — a new entry with the date, the origin title you typed (`New money entry`), the amount and the origin `income` (in green)
+3. **Available value** — recalculated as Total Amount minus Total Expenses (`R$ 420,00` - `R$ 100,00` = `R$ 320,00`)
+
+The day of the income is also highlighted in the **Calendar**: green for an income only, purple when the same day has both an expense and an income (as day `26` in the image).
+
+### List of expenses and incomes
+
+On the main screen of the control, press `L` on the keyboard to focus the **Expense / Income list**, which shows every money entry and exit of the control. The focused panel gets a highlighted border and the footer bar changes to the list commands:
+
+<p align="center">
+  <img src="images/10-list-select-rounded.png" alt="Expense / Income list focused" width="800" />
+</p>
+
+| Key | Action |
+|---|---|
+| `↑` / `↓` | Scroll through the entries |
+| `Enter` | Open the details of the selected entry (line items of an expense) |
+| `U` | Edit the selected entry |
+| `D` | Delete mode: select entries with `Space` and confirm with `Enter` |
+| `F` | Filter the list (`Tab` changes the column, `Enter` applies) |
+| `L` | Exit the list focus |
+
+Each row shows **Date · Name · Type · Amount · Origin**, where the origin is `expense` (red) or `income` (green).
 
 ### Edit Entry modal
 
-- Allows editing an existing expense or income entry directly from the entry list.
-- Fields: **Name · Amount · Type · Date** (Tab to cycle).
-- Changes take effect immediately and persist to the control file.
+With the list focused (`L`), use the `↑` / `↓` arrows to select the expense or income you want (1), then:
 
-> Add images here
+- `U` — edit the entry
+- `D` — delete the entry (delete mode: `Space` marks, `Enter` confirms)
+- `Enter` — see more details about the entry
+
+Pressing `U` opens the **Edit entry** modal (2) with the data of the selected entry:
+
+<p align="center">
+  <img src="images/11-edit-expense-rounded.png" alt="Edit entry" width="800" />
+</p>
+
+- Fields: **Name · Amount · Type · Date** (`Tab` moves to the next field)
+- `Enter` saves, `Esc` cancels
+- Changes take effect immediately and persist to the control file.
 
 ### Edit Total Balance (`B`)
 
-- Small modal to correct the initial `total-value` of the current period. Takes effect immediately.
+To change the initial balance of the control, press `B` on the keyboard. The first press focuses the **Total Amount** panel (1); press `B` again to open the **balance** modal (2):
 
-> Add images here
+<p align="center">
+  <img src="images/12-balance-rounded.png" alt="Edit total balance" width="800" />
+</p>
 
-### Expense Detail modal
+- **Current** shows the initial balance (`total-value`) of the current period, without the incomes
+- Type the **New value** and press `Enter` to save, or `Esc` to cancel
+- The change takes effect immediately and is saved in the control file
 
-- Read-only view of all line items for an expense entry (name, quantity, size, unit price, amount).
+The value shown in **Total Amount** (1) is the **initial balance plus all the incomes** (3) of the control. In the image the initial balance is `R$ 320,00` and there is one income of `R$ 100,00`, so Total Amount is `R$ 420,00`. This is why the modal shows `R$ 320,00` as the current value and not `R$ 420,00`.
 
 ---
 
@@ -228,29 +322,33 @@ Controls are plain `.json` files stored wherever you create them.
 
 ```json
 {
-  "June 2026": {               
-    "total-value": 500.00,     
-    "Fruit Shop": {            
-      "date": "01/06/2026",      
-      "total": 25.00,          
-      "type": "market",           
-      "type-color": "#FF6B6B",    
-      "description": "Bought fruits",
-      "origin": "expense",       
-      "details": [             
+  "name": "June-2026",
+  "total-amount": 320,
+  "Outubro 2026": {
+    "total-value": 320,
+    "expense-20261026105838": {
+      "date": "26/10/2026",
+      "total": 100,
+      "type": "Credit Card",
+      "type-color": "FF6B6B",
+      "description": "Name of the expense",
+      "origin": "expense",
+      "details": [
         {
-          "name": "banana",
-          "amount": 10.00,
-          "item-price": 5.00,
-          "quantity": 2,
-          "size": "Kg"
+          "name": "Item 1 ",
+          "amount": 20,
+          "item-price": 0,
+          "quantity": 1,
+          "size": "2"
         }
       ]
     },
-    "Salary": {
-      "date": "05/06/2026",
-      "total": 5000.00,
-      "description": "August Salary",
+    "income-20261026110737": {
+      "date": "26/10/2026",
+      "total": 100,
+      "type": null,
+      "type-color": null,
+      "description": "New money entry",
       "origin": "income",
       "details": []
     }
@@ -260,6 +358,7 @@ Controls are plain `.json` files stored wherever you create them.
 
 | Field | Description |
 |---|---|
+| `name` (top level) | Control name |
 | `total-amount` (top level) | Initial value set when the control was created; used as the starting balance of new periods |
 | `total-value` | Starting balance for the period |
 | `origin` | `"expense"` (money out) or `"income"` (money in) |
