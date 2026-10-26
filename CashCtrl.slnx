@@ -1,3 +1,4 @@
 <Solution>
+  <Project Path="CashCtrl.Installer/CashCtrl.Installer.csproj" />
   <Project Path="CashCtrl/CashCtrl.csproj" />
 </Solution>

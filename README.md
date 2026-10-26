@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/C%23-12-239120?style=for-the-badge&logo=csharp&logoColor=white" alt="C#" />
   <img src="https://img.shields.io/badge/Spectre.Console-0.49.1-9D88FF?style=for-the-badge&logo=windows-terminal&logoColor=white" alt="Spectre.Console" />
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows" />
-  <img src="https://img.shields.io/badge/Version-1.0.0-DCD7FF?style=for-the-badge" alt="Version" />
+  <img src="https://img.shields.io/badge/Version-2.0.0-DCD7FF?style=for-the-badge" alt="Version" />
   <img src="https://img.shields.io/badge/License-MIT-50DC8C?style=for-the-badge" alt="MIT License" />
 </p>
 
@@ -29,7 +29,20 @@ Each control represents a financial period (e.g., "June 2026") and holds a start
 
 ## Installation
 
-### Option 1 — TUI installer (recommended)
+### Option 1 — Standalone installer (recommended)
+
+Download `cash-ctrl-installer.exe` and run it. A Spectre.Console TUI shows the plan and the status of each step:
+
+1. Check for an existing installation (asks whether to delete the old version and install the new one)
+2. Fetch the latest release from GitHub
+3. Download `cash-ctrl.exe` with a progress bar
+4. Install to `%LOCALAPPDATA%\CashCtrl`
+5. Add the install directory to the user PATH
+6. Verify the installation
+
+Build it from source with `dotnet publish CashCtrl.Installer -c Release -o dist`.
+
+### Option 2 — Built-in TUI installer
 
 Download `cash-ctrl.exe` from the [release page](https://github.com/F4NT0/Cash-Ctrl/releases/latest), place it anywhere, then run:
 
@@ -44,14 +57,14 @@ The TUI installer will:
 
 Open a new terminal and you can use `cash-ctrl` from anywhere.
 
-### Option 2 — Manual
+### Option 3 — Manual
 
 1. Copy `dist/cash-ctrl.exe` to a folder of your choice (e.g. `C:\Tools`)
 2. Add that folder to your user PATH:
    - Open **Start → Edit environment variables for your account**
    - Edit `Path` → add the folder
 
-### Option 3 — Build from source
+### Option 4 — Build from source
 
 ```powershell
 # Requires .NET 10 SDK
@@ -141,18 +154,36 @@ Full-screen TUI with 3 columns at the top, a summary bar in the middle, and an e
 
 | Key | Action |
 |---|---|
+| `?` | Open the help panel with every available command |
 | `C` | Focus the controls panel |
-| `I` | Edit the initial total balance |
-| `T` | Add a new income |
+| `B` | Focus the balance; press again to edit the initial total balance |
+| `I` | Focus the balance; press again to add a new income |
 | `E` | Add a new expense |
 | `L` | Focus the entry list |
+| `K` | Open the floating calculator |
 | `S` | Cycle calendar month (when entries span multiple months) |
 | `↑` / `↓` | Navigate focused panel |
 | `Enter` | Confirm / open detail |
 | `D` | Enter delete mode (in list) / delete control file (in controls panel) |
 | `Space` | Mark entry for deletion (in delete mode) |
 | `F` | Filter inside the list (use `Tab` to change columns) |
-| `Esc` | Cancel / exit focus / quit |
+| `Esc` | Step back: cancel mode, exit focus, then return to the start screen |
+| `Q` | Quit the whole software |
+
+The footer bar only shows `C`, `B`, `I`, `E` and `L`; the other shortcuts are hidden but listed in the help panel (`?`).
+
+### Calculator (`K`)
+
+Floating panel on the top right. Type with the keyboard: digits, `.` or `,`, `+ - * / ^ %`, parentheses (`x` also multiplies).
+
+- `Enter` calculates; the result can be continued by typing an operator
+- `Del` clears the current line, `Backspace` removes a character
+- Keeps a **history of the current session**; it is cleared when the software is closed
+- `Esc` closes the panel
+
+### Help (`?`)
+
+Floating panel listing every command for the main screen, entry list and calculator. Press any key to close.
 
 ### New Expense modal
 
@@ -177,7 +208,7 @@ Full-screen TUI with 3 columns at the top, a summary bar in the middle, and an e
 
 > Add images here
 
-### Edit Total Balance (`I`)
+### Edit Total Balance (`B`)
 
 - Small modal to correct the initial `total-value` of the current period. Takes effect immediately.
 
@@ -229,6 +260,7 @@ Controls are plain `.json` files stored wherever you create them.
 
 | Field | Description |
 |---|---|
+| `total-amount` (top level) | Initial value set when the control was created; used as the starting balance of new periods |
 | `total-value` | Starting balance for the period |
 | `origin` | `"expense"` (money out) or `"income"` (money in) |
 | `type` / `type-color` | Expense category and its chart color |
@@ -270,6 +302,9 @@ This removes the executable and cleans up the PATH entry.
 ```
 Cash-Ctrl/
 ├── CashCtrl.slnx
+├── CashCtrl.Installer/
+│   ├── CashCtrl.Installer.csproj
+│   └── Program.cs                    ← Standalone Spectre.Console installer
 ├── CashCtrl/
 │   ├── CashCtrl.csproj
 │   ├── Program.cs                    ← CLI entry point & argument routing
@@ -294,6 +329,8 @@ Cash-Ctrl/
 │       ├── EditEntryModal.cs         ← Edit an existing entry
 │       ├── EditTotalModal.cs         ← Edit initial balance
 │       ├── ExpenseDetailModal.cs     ← View expense line items
+│       ├── CalculatorModal.cs        ← Floating calculator with session history
+│       ├── HelpModal.cs              ← Floating help with all commands
 │       └── InstallerScreen.cs        ← TUI installer & uninstaller (PATH setup)
 ├── dist/
 │   └── cash-ctrl.exe                 ← Self-contained Windows executable

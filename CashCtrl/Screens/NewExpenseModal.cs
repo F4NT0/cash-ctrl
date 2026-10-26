@@ -24,10 +24,15 @@ public static class NewExpenseModal
 
         // Collect existing types → colors mapping
         var typeColors = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var usedColors = new HashSet<string>();
         if (period is not null)
         {
             foreach (var e in period.Entries.Values.Where(e => e.Origin == "expense" && e.Type is not null))
-                typeColors.TryAdd(e.Type!, e.TypeColor ?? Palette[0]);
+            {
+                var color = e.TypeColor ?? Palette[0];
+                typeColors.TryAdd(e.Type!, color);
+                usedColors.Add(color);
+            }
         }
 
         string name      = string.Empty;
@@ -86,9 +91,16 @@ public static class NewExpenseModal
                 if (string.IsNullOrWhiteSpace(type)) type = "Other";
                 if (!typeColors.TryGetValue(type, out var color))
                 {
+                    // Find next available color that's not already used
                     color = Palette[_paletteIdx % Palette.Length];
+                    while (usedColors.Contains(color))
+                    {
+                        _paletteIdx++;
+                        color = Palette[_paletteIdx % Palette.Length];
+                    }
                     _paletteIdx++;
                     typeColors[type] = color;
+                    usedColors.Add(color);
                 }
                 typeColor = color;
 
