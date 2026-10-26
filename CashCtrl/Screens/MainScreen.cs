@@ -80,12 +80,29 @@ public static class MainScreen
 
             var k = await Task.Run(() => Console.ReadKey(true));
 
-            if (k.Key == ConsoleKey.Escape || (k.KeyChar is 'q' or 'Q' && !isFiltering))
+            // Q — quit the whole software
+            if (k.KeyChar is 'q' or 'Q' && !isFiltering)
+            {
+                AnsiConsole.Clear(); return;
+            }
+
+            // ? — help with every available command
+            if (k.KeyChar == '?' && !isFiltering)
+            {
+                HelpModal.Show();
+                AnsiConsole.Clear();
+                continue;
+            }
+
+            // Esc — step back until the start screen
+            if (k.Key == ConsoleKey.Escape)
             {
                 if (isControlsDeleting) { isControlsDeleting = false; continue; }
                 if (isDeleting) { isDeleting = false; deleteKeys.Clear(); continue; }
                 if (focus != MainFocus.None) { focus = MainFocus.None; continue; }
-                AnsiConsole.Clear(); return;
+                AnsiConsole.Clear();
+                await WelcomeScreen.ShowAsync();
+                return;
             }
 
             // Filter mode: F key enters filter mode
@@ -221,6 +238,10 @@ public static class MainScreen
                     focus = MainFocus.Total;
                 }
             }
+
+            // K — floating calculator (history lives only for the session)
+            if (k.KeyChar is 'k' or 'K' && !isDeleting)
+                CalculatorModal.Show();
 
             // E — transient modal, no persistent focus
             if (k.KeyChar is 'e' or 'E' && !isDeleting)
@@ -497,7 +518,7 @@ public static class MainScreen
             MainFocus.Total =>
                 $" [{dim}]Total: [/][bold {fk}]I[/][{dim}] add income   [/][bold {fk}]B[/][{dim}] edit balance   [/][bold {fk}]Esc[/][{dim}] exit panel[/]",
             _ =>
-                $" [{dim}]Panels: [/][bold {fk}]C[/][{dim}] controls   [/][bold {fk}]B[/][{dim}] balance   [/][bold {fk}]I[/][{dim}] income   [/][bold {fk}]E[/][{dim}] expense   [/][bold {fk}]L[/][{dim}] list   [/][bold {fk}]S[/][{dim}] cal month   [/][bold {fk}]Esc[/][{dim}] quit[/]"
+                $" [{dim}]Panels: [/][bold {fk}]C[/][{dim}] controls   [/][bold {fk}]B[/][{dim}] balance   [/][bold {fk}]I[/][{dim}] income   [/][bold {fk}]E[/][{dim}] expense   [/][bold {fk}]L[/][{dim}] list[/]"
         };
         // Pad to terminal width to erase any stale characters from a longer previous footer
         int termW2 = Math.Max(1, Console.WindowWidth);
@@ -564,9 +585,6 @@ public static class MainScreen
             }
         }
 
-        int termW = Math.Max(20, Console.WindowWidth);
-        bool compactChart = termW < 120;
-
         IRenderable content;
         if (byType.Count == 0)
         {
@@ -577,35 +595,15 @@ public static class MainScreen
             var types  = byType.OrderByDescending(kv => kv.Value.total).ToList();
             var sb     = new System.Text.StringBuilder();
 
-            if (compactChart)
+            // Type name in its color + total value, no bars
+            int maxLabel = Math.Min(types.Max(kv => kv.Key.Length), 14);
+            foreach (var (typeName, (val, colHex)) in types)
             {
-                // Compact: type name + total value only, no bars
-                int maxLabel = Math.Min(types.Max(kv => kv.Key.Length), 12);
-                foreach (var (typeName, (val, colHex)) in types)
-                {
-                    var label  = typeName.Length > maxLabel ? typeName[..maxLabel] : typeName.PadRight(maxLabel);
-                    var valStr = FormatMoney(val);
-                    sb.AppendLine(
-                        $"[#{colHex}]{Markup.Escape(label)}[/] " +
-                        $"[{Hex(Theme.Muted)}]{Markup.Escape(valStr)}[/]");
-                }
-            }
-            else
-            {
-                var maxVal   = byType.Values.Max(v => v.total);
-                int maxLabel = Math.Min(types.Max(kv => kv.Key.Length), 14);
-                int barMax   = Math.Max(1, 40);
-                foreach (var (typeName, (val, colHex)) in types)
-                {
-                    var label  = typeName.Length > maxLabel ? typeName[..maxLabel] : typeName.PadRight(maxLabel);
-                    int barLen = maxVal > 0 ? Math.Max(1, (int)((val / maxVal) * barMax)) : 1;
-                    var bar    = new string('█', barLen);
-                    var valStr = FormatMoney(val);
-                    sb.AppendLine(
-                        $"[{Hex(Theme.Muted)}]{Markup.Escape(label)}[/] " +
-                        $"[#{colHex}]{bar}[/] " +
-                        $"[{Hex(Theme.Muted)}]{Markup.Escape(valStr)}[/]");
-                }
+                var label  = typeName.Length > maxLabel ? typeName[..maxLabel] : typeName.PadRight(maxLabel);
+                var valStr = FormatMoney(val);
+                sb.AppendLine(
+                    $"[#{colHex}]{Markup.Escape(label)}[/] " +
+                    $"[{Hex(Theme.Muted)}]{Markup.Escape(valStr)}[/]");
             }
             content = new Markup(sb.ToString().TrimEnd());
         }

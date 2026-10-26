@@ -2,5 +2,5 @@ namespace CashCtrl;
 
 public static class AppVersion
 {
-    public const string Current = "v1.0.2";
+    public const string Current = "v2.0.0";
 }

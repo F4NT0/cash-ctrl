@@ -69,6 +69,11 @@ public static class ControlService
 
         var name = favName ?? embeddedName ?? Path.GetFileNameWithoutExtension(filePath);
 
+        // Periods created before the initial value was propagated hold 0; heal them
+        if (embeddedAmount != 0m)
+            foreach (var p in periods.Values)
+                if (p.TotalValue == 0m) p.TotalValue = embeddedAmount;
+
         var control = new ControlFile
         {
             Name        = name,
@@ -128,7 +133,7 @@ public static class ControlService
     public static async Task SaveExpenseAsync(ControlFile control, string periodKey, ControlEntry expense)
     {
         var period = control.Periods.GetValueOrDefault(periodKey)
-                     ?? new ControlPeriod { TotalValue = 0 };
+                     ?? new ControlPeriod { TotalValue = control.TotalAmount };
 
         var entryKey = $"expense-{DateTime.Now:yyyyMMddHHmmss}";
 
@@ -187,7 +192,7 @@ public static class ControlService
     public static async Task SaveIncomeAsync(ControlFile control, string periodKey, ControlEntry income)
     {
         var period = control.Periods.GetValueOrDefault(periodKey)
-                     ?? new ControlPeriod { TotalValue = 0 };
+                     ?? new ControlPeriod { TotalValue = control.TotalAmount };
 
         var entryKey = $"income-{DateTime.Now:yyyyMMddHHmmss}";
 
